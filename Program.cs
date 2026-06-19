@@ -60,6 +60,7 @@ app.MapGet("/api/dashboard", async (DashboardService dashboard) =>
         summary.AdjustmentCountLast30Days,
         summary.AdjustmentQuantityLast30Days,
         summary.SupplierOverview,
+        summary.AiUsage,
         LowStockProducts = summary.LowStockProducts.Select(ToProductResponse),
         RecentMovements = summary.RecentMovements.Select(ToMovementResponse)
     });
@@ -122,6 +123,63 @@ app.MapGet("/api/stock-movements/summary", async (InventoryService inventory) =>
 })
 .WithName("GetStockMovementSummary");
 
+app.MapGet("/api/purchase-orders", async (InventoryService inventory) =>
+{
+    var orders = await inventory.GetPurchaseOrdersAsync();
+    return Results.Ok(orders.Select(ToPurchaseOrderResponse));
+})
+.WithName("GetPurchaseOrders");
+
+app.MapGet("/api/purchase-orders/{id:int}", async (int id, InventoryService inventory) =>
+{
+    var order = await inventory.GetPurchaseOrderAsync(id);
+    return order is null ? Results.NotFound() : Results.Ok(ToPurchaseOrderResponse(order));
+})
+.WithName("GetPurchaseOrder");
+
+app.MapPost("/api/purchase-orders", async (PurchaseOrderCreateRequest request, InventoryService inventory) =>
+{
+    var result = await inventory.CreatePurchaseOrderAsync(request.SupplierId, request.Lines);
+    if (!result.Succeeded || result.Order is null)
+    {
+        return Results.BadRequest(new { result.Message });
+    }
+
+    var order = await inventory.GetPurchaseOrderAsync(result.Order.Id);
+    return Results.Ok(ToPurchaseOrderResponse(order!));
+})
+.WithName("CreatePurchaseOrder");
+
+app.MapPost("/api/purchase-orders/{id:int}/order", async (int id, InventoryService inventory) =>
+{
+    var result = await inventory.MarkPurchaseOrderOrderedAsync(id);
+    return result.Succeeded
+        ? Results.Ok(new { result.Message })
+        : Results.BadRequest(new { result.Message });
+})
+.WithName("MarkPurchaseOrderOrdered");
+
+app.MapPost("/api/purchase-orders/{id:int}/receive", async (
+    int id,
+    PurchaseOrderReceiveRequest request,
+    InventoryService inventory) =>
+{
+    var result = await inventory.ReceivePurchaseOrderAsync(id, request.Lines ?? []);
+    return result.Succeeded
+        ? Results.Ok(new { result.Message })
+        : Results.BadRequest(new { result.Message });
+})
+.WithName("ReceivePurchaseOrder");
+
+app.MapPost("/api/purchase-orders/{id:int}/cancel", async (int id, InventoryService inventory) =>
+{
+    var result = await inventory.CancelPurchaseOrderAsync(id);
+    return result.Succeeded
+        ? Results.Ok(new { result.Message })
+        : Results.BadRequest(new { result.Message });
+})
+.WithName("CancelPurchaseOrder");
+
 app.MapPost("/api/stock-movements/adjust", async (StockAdjustmentRequest request, InventoryService inventory) =>
 {
     var result = await inventory.AdjustStockAsync(
@@ -134,6 +192,100 @@ app.MapPost("/api/stock-movements/adjust", async (StockAdjustmentRequest request
         : Results.BadRequest(new { result.Message });
 })
 .WithName("AdjustStockToCount");
+
+app.MapGet("/api/ai-usage", async (InventoryService inventory) =>
+{
+    var records = await inventory.GetAiTokenUsageRecordsAsync();
+    return Results.Ok(records.Select(ToAiUsageResponse));
+})
+.WithName("GetAiUsage");
+
+app.MapGet("/api/ai-usage/summary", async (DateTime? monthStart, InventoryService inventory) =>
+{
+    var summary = await inventory.GetAiUsageSummaryAsync(monthStart);
+    return Results.Ok(summary);
+})
+.WithName("GetAiUsageSummary");
+
+app.MapGet("/api/ai-budget", async (InventoryService inventory) =>
+{
+    var monthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+    var budgets = await inventory.GetAiMonthlyBudgetsAsync();
+    var budget = budgets.FirstOrDefault(value => value.MonthStart == monthStart)
+        ?? new inventory_admin.Models.AiMonthlyBudget
+        {
+            MonthStart = monthStart,
+            BudgetUsd = 25m,
+            WarningThresholdPercent = 80m,
+            CriticalThresholdPercent = 100m
+        };
+
+    return Results.Ok(ToAiMonthlyBudgetResponse(budget));
+})
+.WithName("GetCurrentAiBudget");
+
+app.MapPost("/api/ai-budget", async (AiBudgetSettingsRequest request, InventoryService inventory) =>
+{
+    var monthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+    var result = await inventory.SaveAiMonthlyBudgetAsync(new AiMonthlyBudgetRequest(
+        monthStart,
+        request.MonthlyBudgetUsd,
+        request.WarningThresholdPercent,
+        100m));
+
+    return result.Succeeded
+        ? Results.Ok(ToAiMonthlyBudgetResponse(result.Budget!))
+        : Results.BadRequest(new { result.Message });
+})
+.WithName("SaveCurrentAiBudget");
+
+app.MapGet("/api/ai-usage/monthly-budgets", async (InventoryService inventory) =>
+{
+    var budgets = await inventory.GetAiMonthlyBudgetsAsync();
+    return Results.Ok(budgets.Select(ToAiMonthlyBudgetResponse));
+})
+.WithName("GetAiMonthlyBudgets");
+
+app.MapPut("/api/ai-usage/monthly-budgets", async (AiMonthlyBudgetRequest request, InventoryService inventory) =>
+{
+    var result = await inventory.SaveAiMonthlyBudgetAsync(request);
+    return result.Succeeded
+        ? Results.Ok(ToAiMonthlyBudgetResponse(result.Budget!))
+        : Results.BadRequest(new { result.Message });
+})
+.WithName("UpsertAiMonthlyBudget");
+
+app.MapGet("/api/ai-model-prices", async (InventoryService inventory) =>
+{
+    var prices = await inventory.GetAiModelPricesAsync();
+    return Results.Ok(prices.Select(ToAiModelPriceResponse));
+})
+.WithName("GetAiModelPrices");
+
+app.MapPost("/api/ai-model-prices", async (AiModelPriceCreateRequest request, InventoryService inventory) =>
+{
+    var result = await inventory.SaveAiModelPriceAsync(request);
+    return result.Succeeded
+        ? Results.Ok(ToAiModelPriceResponse(result.Price!))
+        : Results.BadRequest(new { result.Message });
+})
+.WithName("CreateAiModelPrice");
+
+app.MapPost("/api/ai-usage", async (AiTokenUsageCreateRequest request, InventoryService inventory) =>
+{
+    var result = await inventory.SaveAiTokenUsageRecordAsync(request);
+    return result.Succeeded
+        ? Results.Ok(ToAiUsageResponse(result.Record!))
+        : Results.BadRequest(new { result.Message });
+})
+.WithName("CreateAiUsage");
+
+app.MapPost("/api/ai-usage/import", async (AiTokenUsageImportRequest request, InventoryService inventory) =>
+{
+    var result = await inventory.ImportAiTokenUsageAsync(request);
+    return Results.Ok(result);
+})
+.WithName("ImportAiUsage");
 
 app.Run();
 
@@ -164,5 +316,110 @@ static object ToMovementResponse(inventory_admin.Models.StockMovement movement)
         movement.Quantity,
         movement.Reason,
         movement.CreatedAt
+    };
+}
+
+static object ToPurchaseOrderResponse(inventory_admin.Models.PurchaseOrder order)
+{
+    return new
+    {
+        order.Id,
+        Status = order.Status.ToString(),
+        order.CreatedAt,
+        order.UpdatedAt,
+        order.OrderedAt,
+        order.ReceivedAt,
+        order.CancelledAt,
+        Supplier = order.Supplier is null
+            ? null
+            : new
+            {
+                order.Supplier.Id,
+                order.Supplier.Name,
+                order.Supplier.CountryCode
+            },
+        Lines = order.Lines
+            .OrderBy(line => line.Product?.Name)
+            .Select(line => new
+            {
+                line.Id,
+                line.ProductId,
+                Product = line.Product?.Name,
+                line.Product?.Sku,
+                line.OrderedQuantity,
+                line.ReceivedQuantity,
+                OpenQuantity = line.OrderedQuantity - line.ReceivedQuantity
+            })
+    };
+}
+
+static object ToAiUsageResponse(inventory_admin.Models.AiTokenUsageRecord record)
+{
+    return new
+    {
+        record.Id,
+        record.AiModelPriceId,
+        record.FeatureName,
+        record.Provider,
+        record.BillingProvider,
+        record.UpstreamProvider,
+        record.ModelName,
+        record.OpenRouterModelSlug,
+        record.RouteName,
+        record.PromptTokens,
+        record.CachedInputTokens,
+        record.CompletionTokens,
+        record.ReasoningTokens,
+        record.ToolCallCount,
+        record.SearchCallCount,
+        record.TotalTokens,
+        record.PromptCostPerMillionTokens,
+        record.CachedInputCostPerMillionTokens,
+        record.CompletionCostPerMillionTokens,
+        record.SearchCostPerThousandCalls,
+        record.EstimatedCostUsd,
+        record.ActualCostUsd,
+        record.EffectiveCostUsd,
+        record.Notes,
+        record.CreatedAt
+    };
+}
+
+static object ToAiModelPriceResponse(inventory_admin.Models.AiModelPrice price)
+{
+    return new
+    {
+        price.Id,
+        price.Provider,
+        price.BillingProvider,
+        price.UpstreamProvider,
+        price.ModelName,
+        price.OpenRouterModelSlug,
+        price.RouteName,
+        price.DisplayName,
+        price.Currency,
+        price.InputCostPerMillionTokens,
+        price.CachedInputCostPerMillionTokens,
+        price.OutputCostPerMillionTokens,
+        price.SearchCostPerThousandCalls,
+        price.EffectiveFrom,
+        price.EffectiveTo,
+        price.IsDefault,
+        price.IsCustom,
+        price.SourceUrl
+    };
+}
+
+static object ToAiMonthlyBudgetResponse(inventory_admin.Models.AiMonthlyBudget budget)
+{
+    return new
+    {
+        budget.Id,
+        budget.MonthStart,
+        budget.BudgetUsd,
+        budget.WarningThresholdPercent,
+        budget.CriticalThresholdPercent,
+        budget.CreatedAt,
+        budget.UpdatedAt
     };
 }

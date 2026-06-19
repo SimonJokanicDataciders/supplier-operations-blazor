@@ -1,0 +1,568 @@
+@page "/ai-usage"
+@rendermode InteractiveServer
+@inject InventoryService Inventory
+
+<PageTitle>AI Usage</PageTitle>
+
+<header class="page-header">
+    <div>
+        <span>Operations</span>
+        <h1>AI usage</h1>
+        <p>Track token usage, provider routing, estimated cost, actual invoices, and monthly budget pressure.</p>
+    </div>
+</header>
+
+@if (summary is null)
+{
+    <p><em>Loading AI usage...</em></p>
+}
+else
+{
+    <section class="stat-grid">
+        <StatTile Label="Month spend" Value="@summary.EffectiveCostUsd.ToString("C")" Detail="@BudgetDetail" />
+        <StatTile Label="Requests" Value="@summary.RequestCount.ToString()" Detail="current month" />
+        <StatTile Label="Tokens" Value="@summary.TotalTokens.ToString("N0")" Detail="input + cache + output" />
+        <StatTile Label="Search calls" Value="@summary.SearchCallCount.ToString("N0")" Detail="billable tool calls" />
+    </section>
+
+    <section class="operations-strip">
+        <article class="operation-cell @BudgetStatusClass">
+            <span>Budget status</span>
+            <strong>@(summary.Budget?.Status ?? "No budget")</strong>
+            <small>@BudgetPercentText</small>
+        </article>
+        <article class="operation-cell">
+            <span>Estimated</span>
+            <strong>@summary.EstimatedCostUsd.ToString("C")</strong>
+            <small>from stored rates</small>
+        </article>
+        <article class="operation-cell">
+            <span>Actual</span>
+            <strong>@summary.ActualCostUsd.ToString("C")</strong>
+            <small>invoice override total</small>
+        </article>
+        <article class="operation-cell">
+            <span>Delta</span>
+            <strong>@summary.EstimatedVsActualDeltaUsd.ToString("C")</strong>
+            <small>actual minus estimate</small>
+        </article>
+    </section>
+
+    <section class="split-grid">
+        <EditForm Model="usageForm" OnValidSubmit="SaveUsageAsync" FormName="ai-usage-form" class="admin-form ai-usage-form">
+            <h2>New usage run</h2>
+
+            @if (!string.IsNullOrWhiteSpace(message))
+            {
+                <p class="form-message">@message</p>
+            }
+
+            <div class="form-grid">
+                <label>
+                    Feature
+                    <InputText @bind-Value="usageForm.FeatureName" />
+                </label>
+                <label>
+                    Price catalog
+                    <InputSelect @bind-Value="usageForm.AiModelPriceId" @bind-Value:after="ApplySelectedPrice">
+                        <option value="">Manual provider/model</option>
+                        @foreach (var price in prices)
+                        {
+                            <option value="@price.Id">@price.DisplayName</option>
+                        }
+                    </InputSelect>
+                </label>
+                <label>
+                    Provider
+                    <InputText @bind-Value="usageForm.Provider" />
+                </label>
+                <label>
+                    Model
+                    <InputText @bind-Value="usageForm.ModelName" />
+                </label>
+            </div>
+
+            <div class="form-grid">
+                <label>
+                    Prompt/input tokens
+                    <InputNumber @bind-Value="usageForm.PromptTokens" />
+                </label>
+                <label>
+                    Completion/output tokens
+                    <InputNumber @bind-Value="usageForm.CompletionTokens" />
+                </label>
+                <label>
+                    Actual cost USD
+                    <InputNumber @bind-Value="usageForm.ActualCostUsd" />
+                </label>
+                <label>
+                    Usage date
+                    <InputDate @bind-Value="usageForm.CreatedAt" />
+                </label>
+            </div>
+
+            <label>
+                Notes
+                <InputTextArea @bind-Value="usageForm.Notes" />
+            </label>
+
+            <button class="btn btn-secondary advanced-toggle" type="button" @onclick="ToggleAdvancedUsage">
+                @(showAdvancedUsage ? "Hide advanced fields" : "Show advanced fields")
+            </button>
+
+            @if (showAdvancedUsage)
+            {
+                <section class="advanced-panel">
+                    <div class="form-grid">
+                        <label>
+                            Cached input tokens
+                            <InputNumber @bind-Value="usageForm.CachedInputTokens" />
+                        </label>
+                        <label>
+                            Reasoning tokens
+                            <InputNumber @bind-Value="usageForm.ReasoningTokens" />
+                        </label>
+                        <label>
+                            Tool calls
+                            <InputNumber @bind-Value="usageForm.ToolCallCount" />
+                        </label>
+                        <label>
+                            Search calls
+                            <InputNumber @bind-Value="usageForm.SearchCallCount" />
+                        </label>
+                    </div>
+
+                    <div class="form-grid">
+                        <label>
+                            Billing provider
+                            <InputSelect @bind-Value="usageForm.BillingProvider">
+                                @foreach (var provider in billingProviders)
+                                {
+                                    <option value="@provider">@provider</option>
+                                }
+                            </InputSelect>
+                        </label>
+                        <label>
+                            Upstream provider
+                            <InputText @bind-Value="usageForm.UpstreamProvider" />
+                        </label>
+                        <label>
+                            OpenRouter slug
+                            <InputText @bind-Value="usageForm.OpenRouterModelSlug" />
+                        </label>
+                        <label>
+                            Route
+                            <InputText @bind-Value="usageForm.RouteName" />
+                        </label>
+                    </div>
+
+                    <div class="form-grid">
+                        <label>
+                            Input $ / 1M
+                            <InputNumber @bind-Value="usageForm.PromptCostPerMillionTokens" />
+                        </label>
+                        <label>
+                            Cached $ / 1M
+                            <InputNumber @bind-Value="usageForm.CachedInputCostPerMillionTokens" />
+                        </label>
+                        <label>
+                            Output $ / 1M
+                            <InputNumber @bind-Value="usageForm.CompletionCostPerMillionTokens" />
+                        </label>
+                        <label>
+                            Search $ / 1K
+                            <InputNumber @bind-Value="usageForm.SearchCostPerThousandCalls" />
+                        </label>
+                    </div>
+                </section>
+            }
+
+            <div class="form-actions">
+                <button class="btn btn-primary" type="submit" disabled="@saving">Save usage run</button>
+            </div>
+        </EditForm>
+
+        <div class="stacked-panels">
+            <section class="panel import-panel">
+                <div class="section-heading">
+                    <h2>Import usage data</h2>
+                    <span>CSV or JSON paste</span>
+                </div>
+
+                <label>
+                    Format
+                    <select @bind="importForm.Format">
+                        <option value="auto">Auto detect</option>
+                        <option value="csv">CSV</option>
+                        <option value="json">JSON</option>
+                    </select>
+                </label>
+                <label>
+                    Usage data
+                    <textarea class="payload-input" @bind="importForm.Content"></textarea>
+                </label>
+                <div class="form-actions">
+                    <button class="btn btn-secondary" type="button" disabled="@saving" @onclick="ImportUsageAsync">Import usage</button>
+                    <button class="btn" type="button" disabled="@saving" @onclick="ClearImport">Clear</button>
+                </div>
+                @if (importErrors.Count > 0)
+                {
+                    <div class="form-message import-errors">
+                        <strong>@importErrors.Count rows need attention</strong>
+                        @foreach (var error in importErrors.Take(4))
+                        {
+                            <small>Row @error.RowNumber: @error.Message</small>
+                        }
+                    </div>
+                }
+            </section>
+
+            <EditForm Model="budgetForm" OnValidSubmit="SaveBudgetAsync" FormName="ai-budget-form" class="admin-form compact-form">
+                <h2>Current month budget</h2>
+                <div class="form-grid">
+                    <label>
+                        Budget USD
+                        <InputNumber @bind-Value="budgetForm.BudgetUsd" />
+                    </label>
+                    <label>
+                        Warning %
+                        <InputNumber @bind-Value="budgetForm.WarningThresholdPercent" />
+                    </label>
+                </div>
+                <button class="btn btn-primary" type="submit" disabled="@saving">Save budget</button>
+            </EditForm>
+
+            <EditForm Model="priceForm" OnValidSubmit="SavePriceAsync" FormName="ai-price-form" class="admin-form compact-form">
+                <h2>Custom provider price</h2>
+                <div class="form-grid">
+                    <label>
+                        Provider
+                        <InputText @bind-Value="priceForm.Provider" />
+                    </label>
+                    <label>
+                        Billing provider
+                        <InputText @bind-Value="priceForm.BillingProvider" />
+                    </label>
+                    <label>
+                        Model
+                        <InputText @bind-Value="priceForm.ModelName" />
+                    </label>
+                    <label>
+                        Route
+                        <InputText @bind-Value="priceForm.RouteName" />
+                    </label>
+                    <label>
+                        Input $ / 1M
+                        <InputNumber @bind-Value="priceForm.InputCostPerMillionTokens" />
+                    </label>
+                    <label>
+                        Output $ / 1M
+                        <InputNumber @bind-Value="priceForm.OutputCostPerMillionTokens" />
+                    </label>
+                    <label>
+                        Cached $ / 1M
+                        <InputNumber @bind-Value="priceForm.CachedInputCostPerMillionTokens" />
+                    </label>
+                    <label>
+                        Search $ / 1K
+                        <InputNumber @bind-Value="priceForm.SearchCostPerThousandCalls" />
+                    </label>
+                    <label>
+                        OpenRouter slug
+                        <InputText @bind-Value="priceForm.OpenRouterModelSlug" />
+                    </label>
+                    <label>
+                        Source URL
+                        <InputText @bind-Value="priceForm.SourceUrl" />
+                    </label>
+                </div>
+                <button class="btn btn-secondary" type="submit" disabled="@saving">Save custom price</button>
+            </EditForm>
+        </div>
+    </section>
+
+    <section class="panel-grid">
+        <SummaryTable Title="Feature spend" Rows="@summary.ByFeature" />
+        <SummaryTable Title="Provider spend" Rows="@summary.ByProvider" />
+        <SummaryTable Title="Model spend" Rows="@summary.ByModel" />
+    </section>
+
+    <section class="panel">
+        <div class="section-heading">
+            <h2>Usage history</h2>
+            <span>@records.Count records</span>
+        </div>
+        <table class="admin-table compact">
+            <thead>
+                <tr>
+                    <th>Created</th>
+                    <th>Feature</th>
+                    <th>Billing</th>
+                    <th>Model</th>
+                    <th>Tokens</th>
+                    <th>Effective cost</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var record in records)
+                {
+                    <tr>
+                        <td>@record.CreatedAt.ToLocalTime().ToString("g")</td>
+                        <td>@record.FeatureName</td>
+                        <td>
+                            <strong>@record.BillingProvider</strong>
+                            <small>@record.Provider / @(record.UpstreamProvider ?? "Direct")</small>
+                        </td>
+                        <td>
+                            <strong>@record.ModelName</strong>
+                            <small>@(record.OpenRouterModelSlug ?? record.RouteName ?? "-")</small>
+                        </td>
+                        <td>@record.TotalTokens.ToString("N0")</td>
+                        <td>@record.EffectiveCostUsd.ToString("C")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </section>
+}
+
+@code {
+    private readonly string[] billingProviders = ["OpenAI", "Anthropic", "Google", "Cohere", "OpenRouter", "Custom"];
+    private AiUsageSummaryDto? summary;
+    private List<AiTokenUsageRecord> records = [];
+    private List<AiModelPrice> prices = [];
+    private AiUsageForm usageForm = new();
+    private AiBudgetForm budgetForm = new();
+    private AiPriceForm priceForm = new();
+    private AiUsageImportForm importForm = new();
+    private string? message;
+    private bool saving;
+    private bool showAdvancedUsage;
+    private List<AiTokenUsageImportError> importErrors = [];
+
+    private string BudgetDetail =>
+        summary?.Budget is null
+            ? "default budget not saved"
+            : $"{summary.Budget.PercentUsed:N1}% of {summary.Budget.BudgetUsd:C}";
+
+    private string BudgetPercentText =>
+        summary?.Budget is null
+            ? "Save a budget to lock the threshold"
+            : $"{summary.Budget.EffectiveSpendUsd:C} used / {summary.Budget.RemainingUsd:C} remaining";
+
+    private string BudgetStatusClass => summary?.Budget?.Status switch
+    {
+        "Critical" => "danger",
+        "Warning" => "warning",
+        _ => string.Empty
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        summary = await Inventory.GetAiUsageSummaryAsync();
+        records = await Inventory.GetAiTokenUsageRecordsAsync();
+        prices = await Inventory.GetAiModelPricesAsync();
+
+        if (summary.Budget is not null)
+        {
+            budgetForm.BudgetUsd = summary.Budget.BudgetUsd;
+            budgetForm.WarningThresholdPercent = summary.Budget.WarningThresholdPercent;
+        }
+    }
+
+    private void ApplySelectedPrice()
+    {
+        var selected = prices.FirstOrDefault(price => price.Id == usageForm.AiModelPriceId);
+        if (selected is null)
+        {
+            return;
+        }
+
+        usageForm.Provider = selected.Provider;
+        usageForm.BillingProvider = selected.BillingProvider ?? selected.Provider;
+        usageForm.UpstreamProvider = selected.UpstreamProvider;
+        usageForm.ModelName = selected.ModelName;
+        usageForm.OpenRouterModelSlug = selected.OpenRouterModelSlug;
+        usageForm.RouteName = selected.RouteName;
+        usageForm.PromptCostPerMillionTokens = selected.InputCostPerMillionTokens;
+        usageForm.CachedInputCostPerMillionTokens = selected.CachedInputCostPerMillionTokens;
+        usageForm.CompletionCostPerMillionTokens = selected.OutputCostPerMillionTokens;
+        usageForm.SearchCostPerThousandCalls = selected.SearchCostPerThousandCalls;
+    }
+
+    private async Task SaveUsageAsync()
+    {
+        saving = true;
+        var result = await Inventory.SaveAiTokenUsageRecordAsync(new AiTokenUsageCreateRequest(
+            usageForm.FeatureName,
+            usageForm.Provider,
+            usageForm.BillingProvider,
+            usageForm.UpstreamProvider,
+            usageForm.ModelName,
+            usageForm.OpenRouterModelSlug,
+            usageForm.RouteName,
+            usageForm.AiModelPriceId,
+            usageForm.PromptTokens,
+            usageForm.CachedInputTokens,
+            usageForm.CompletionTokens,
+            usageForm.ReasoningTokens,
+            usageForm.ToolCallCount,
+            usageForm.SearchCallCount,
+            usageForm.PromptCostPerMillionTokens,
+            usageForm.CachedInputCostPerMillionTokens,
+            usageForm.CompletionCostPerMillionTokens,
+            usageForm.SearchCostPerThousandCalls,
+            usageForm.ActualCostUsd,
+            usageForm.CreatedAt,
+            usageForm.Notes));
+
+        message = result.Message;
+        if (result.Succeeded)
+        {
+            usageForm = new AiUsageForm();
+            await LoadAsync();
+        }
+
+        saving = false;
+    }
+
+    private void ToggleAdvancedUsage()
+    {
+        showAdvancedUsage = !showAdvancedUsage;
+    }
+
+    private async Task ImportUsageAsync()
+    {
+        saving = true;
+        message = null;
+        importErrors = [];
+
+        try
+        {
+            var result = await Inventory.ImportAiTokenUsageAsync(new AiTokenUsageImportRequest(
+                importForm.Content,
+                importForm.Format == "auto" ? null : importForm.Format));
+
+            importErrors = result.Errors.ToList();
+            message = result.Errors.Count == 0
+                ? $"Imported {result.ImportedCount} usage records."
+                : $"Imported {result.ImportedCount} records; {result.Errors.Count} rows need attention.";
+
+            if (result.ImportedCount > 0)
+            {
+                importForm = new AiUsageImportForm();
+                await LoadAsync();
+            }
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private void ClearImport()
+    {
+        importForm = new AiUsageImportForm();
+        message = null;
+        importErrors = [];
+    }
+
+    private async Task SaveBudgetAsync()
+    {
+        saving = true;
+        var monthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var result = await Inventory.SaveAiMonthlyBudgetAsync(new AiMonthlyBudgetRequest(
+            monthStart,
+            budgetForm.BudgetUsd,
+            budgetForm.WarningThresholdPercent,
+            100m));
+
+        message = result.Message;
+        await LoadAsync();
+        saving = false;
+    }
+
+    private async Task SavePriceAsync()
+    {
+        saving = true;
+        var result = await Inventory.SaveAiModelPriceAsync(new AiModelPriceCreateRequest(
+            priceForm.Provider,
+            priceForm.BillingProvider,
+            priceForm.UpstreamProvider,
+            priceForm.ModelName,
+            priceForm.OpenRouterModelSlug,
+            priceForm.RouteName,
+            priceForm.InputCostPerMillionTokens,
+            priceForm.CachedInputCostPerMillionTokens,
+            priceForm.OutputCostPerMillionTokens,
+            priceForm.SearchCostPerThousandCalls,
+            DateTime.UtcNow.Date,
+            priceForm.SourceUrl));
+
+        message = result.Message;
+        if (result.Succeeded)
+        {
+            priceForm = new AiPriceForm();
+            await LoadAsync();
+        }
+
+        saving = false;
+    }
+
+    private sealed class AiUsageForm
+    {
+        public string FeatureName { get; set; } = "Inventory assistant";
+        public string Provider { get; set; } = "OpenAI";
+        public string BillingProvider { get; set; } = "OpenAI";
+        public string? UpstreamProvider { get; set; }
+        public string ModelName { get; set; } = "GPT-5.4 mini";
+        public string? OpenRouterModelSlug { get; set; }
+        public string? RouteName { get; set; } = "Standard";
+        public int? AiModelPriceId { get; set; }
+        public int PromptTokens { get; set; }
+        public int CachedInputTokens { get; set; }
+        public int CompletionTokens { get; set; }
+        public int ReasoningTokens { get; set; }
+        public int ToolCallCount { get; set; }
+        public int SearchCallCount { get; set; }
+        public decimal PromptCostPerMillionTokens { get; set; } = 0.75m;
+        public decimal CachedInputCostPerMillionTokens { get; set; } = 0.075m;
+        public decimal CompletionCostPerMillionTokens { get; set; } = 4.50m;
+        public decimal SearchCostPerThousandCalls { get; set; }
+        public decimal? ActualCostUsd { get; set; }
+        public DateTime? CreatedAt { get; set; } = DateTime.Today;
+        public string? Notes { get; set; }
+    }
+
+    private sealed class AiUsageImportForm
+    {
+        public string Format { get; set; } = "auto";
+        public string Content { get; set; } = string.Empty;
+    }
+
+    private sealed class AiBudgetForm
+    {
+        public decimal BudgetUsd { get; set; } = 25m;
+        public decimal WarningThresholdPercent { get; set; } = 80m;
+    }
+
+    private sealed class AiPriceForm
+    {
+        public string Provider { get; set; } = "Custom";
+        public string? BillingProvider { get; set; }
+        public string? UpstreamProvider { get; set; }
+        public string ModelName { get; set; } = string.Empty;
+        public string? OpenRouterModelSlug { get; set; }
+        public string? RouteName { get; set; } = "Custom";
+        public decimal InputCostPerMillionTokens { get; set; }
+        public decimal CachedInputCostPerMillionTokens { get; set; }
+        public decimal OutputCostPerMillionTokens { get; set; }
+        public decimal SearchCostPerThousandCalls { get; set; }
+        public string? SourceUrl { get; set; }
+    }
+}

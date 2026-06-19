@@ -36,6 +36,11 @@ It connects to the Supplier Intelligence app through a manual JSON bridge: resea
 - Record quick stock-in movements from supplier detail pages.
 - Record quick stock-out movements with negative stock prevention.
 - Record stock adjustment batches from final counted quantities.
+- Create supplier purchase order drafts manually or from low-stock products.
+- Mark purchase orders as ordered, receive partial/full quantities, and cancel open orders.
+- Automatically create `StockIn` movements when purchase order stock is received.
+- Track AI/LLM token usage with a simple default form, optional advanced routing/pricing fields, actual cost, usage date, and notes.
+- Paste AI usage CSV/JSON into the import panel and send it through the AI usage import service.
 - Expose flat JSON API endpoints for dashboard, products, suppliers, imports, and operation summaries.
 
 ## Product Flow
@@ -48,6 +53,20 @@ The two apps stay separate on purpose:
 
 - `Supplier Intelligence` answers: What is this supplier?
 - `Inventory Admin` answers: What do we do with this supplier operationally?
+
+## Purchase Order Flow
+
+```text
+Low-stock product -> Create PO draft -> Mark ordered -> Receive quantities -> StockIn movement + product stock update
+```
+
+Purchase orders are intentionally small:
+
+- A purchase order belongs to one supplier.
+- Draft orders can add, update, or remove product lines.
+- Ordered orders can receive partial or full quantities.
+- Receiving stock increases the product's current stock and writes a `StockIn` audit movement.
+- Cancelled and fully received orders cannot receive more stock.
 
 ## Tech Stack
 
@@ -115,6 +134,17 @@ The bridge is manual by design. It keeps this learning project simple and avoids
 | `GET /api/stock-movements/summary` | Stock movement totals and adjustment summary |
 | `POST /api/stock-movements/adjust` | Adjust product stock to a final counted quantity |
 | `GET /api/suppliers/{id}/operations-summary` | Supplier operation summary |
+| `GET /api/purchase-orders` | Purchase order list |
+| `GET /api/purchase-orders/{id}` | Purchase order detail |
+| `POST /api/purchase-orders` | Create purchase order draft |
+| `POST /api/purchase-orders/{id}/order` | Mark draft order as ordered |
+| `POST /api/purchase-orders/{id}/receive` | Receive purchase order quantities |
+| `POST /api/purchase-orders/{id}/cancel` | Cancel an open purchase order |
+| `GET /api/ai-model-prices` | AI provider/model price catalog |
+| `POST /api/ai-model-prices` | Add a custom AI model price |
+| `GET /api/ai-usage` | AI token usage ledger with estimated and actual cost |
+| `POST /api/ai-usage` | Log an AI token usage record |
+| `POST /api/ai-usage/import` | Import pasted AI usage CSV/JSON records |
 
 ## Current Features
 
@@ -131,7 +161,12 @@ The bridge is manual by design. It keeps this learning project simple and avoids
 | Quick stock-in from supplier detail | Working |
 | Quick stock-out from supplier detail | Working |
 | Stock adjustment batch | Working |
+| Purchase orders | Working |
+| AI token usage tracker | Working |
+| AI model price catalog | Working |
 | Stock movement summary API | Working |
+| Purchase order APIs | Working |
+| AI usage APIs | Working |
 | Minimal API endpoints | Working |
 | SQLite schema initialization | Working |
 
@@ -149,6 +184,10 @@ This project is useful for practicing:
 - Minimal API endpoint design
 - DTOs instead of returning EF entities directly
 - Additive local schema evolution
+- Transactional stock receiving
+- Simple usage/cost tracking for AI-powered workflows
+- Simple/advanced AI usage entry so common runs do not expose provider-routing noise by default
+- Versioned provider/model price snapshots with custom overrides
 
 ## Repository Notes
 

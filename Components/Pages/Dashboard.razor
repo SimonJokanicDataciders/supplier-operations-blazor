@@ -24,6 +24,7 @@ else
         <StatTile Label="Suppliers" Value="@summary.SupplierCount.ToString()" Detail="vendor records" />
         <StatTile Label="Low stock" Value="@summary.LowStockCount.ToString()" Detail="needs review" />
         <StatTile Label="Inventory value" Value="@summary.InventoryValue.ToString("C")" Detail="stock x unit price" />
+        <StatTile Label="AI month spend" Value="@summary.AiUsage.CurrentMonthActualCostUsd.ToString("C6")" Detail="@AiBudgetDetail" />
     </section>
 
     <section class="operations-strip">
@@ -47,6 +48,34 @@ else
             <strong>@summary.SuppliersWithLowStock</strong>
             <small>supplier accounts</small>
         </article>
+    </section>
+
+    <section class="panel ai-dashboard-panel @AiBudgetStateClass">
+        <div class="section-heading">
+            <h2>AI usage</h2>
+            <span>@summary.AiUsage.CurrentMonthRequestCount runs this month</span>
+        </div>
+        <div class="ai-dashboard-grid">
+            <div>
+                <span>Budget used</span>
+                <strong>@summary.AiUsage.BudgetUsedPercent.ToString("N1")%</strong>
+                <small>@summary.AiUsage.CurrentMonthActualCostUsd.ToString("C6") of @summary.AiUsage.MonthlyBudgetUsd.ToString("C2")</small>
+                <div class="budget-meter" aria-label="Dashboard AI budget used">
+                    <span style="width: @AiBudgetBarWidth"></span>
+                </div>
+            </div>
+            <div>
+                <span>Top feature</span>
+                <strong>@(summary.AiUsage.TopFeature ?? "-")</strong>
+                <small>@summary.AiUsage.CurrentMonthTokens.ToString("N0") tokens this month</small>
+            </div>
+            <div>
+                <span>Top model</span>
+                <strong>@(summary.AiUsage.TopModel ?? "-")</strong>
+                <small>Last run @(summary.AiUsage.LastRunAt?.ToLocalTime().ToString("g") ?? "-")</small>
+            </div>
+            <a class="button-link" href="ai-usage">Open ledger</a>
+        </div>
     </section>
 
     <section class="panel-grid">
@@ -132,6 +161,17 @@ else
 
 @code {
     private DashboardSummary? summary;
+
+    private string AiBudgetDetail =>
+        summary is null ? "budget" : $"{summary.AiUsage.BudgetUsedPercent:N1}% of budget";
+
+    private string AiBudgetStateClass =>
+        summary?.AiUsage.IsOverBudget == true ? "danger" :
+        summary?.AiUsage.IsNearBudget == true ? "warning" :
+        "ok";
+
+    private string AiBudgetBarWidth =>
+        $"{Math.Min(summary?.AiUsage.BudgetUsedPercent ?? 0, 100m):0.##}%";
 
     protected override async Task OnInitializedAsync()
     {

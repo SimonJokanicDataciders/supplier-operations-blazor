@@ -1,0 +1,162 @@
+@page "/purchase-orders/new"
+@rendermode InteractiveServer
+@using System.ComponentModel.DataAnnotations
+@inject InventoryService Inventory
+@inject NavigationManager Navigation
+
+<PageTitle>New Purchase Order</PageTitle>
+
+<header class="page-header">
+    <div>
+        <span>Operations</span>
+        <h1>New purchase order</h1>
+        <p>Create a draft supplier order manually or from a low-stock product.</p>
+    </div>
+    <a class="button-link" href="purchase-orders">Back to orders</a>
+</header>
+
+@if (loading)
+{
+    <p><em>Loading purchase order form...</em></p>
+}
+else
+{
+    <EditForm Model="form" OnValidSubmit="CreateAsync" FormName="purchase-order-new-form" class="admin-form">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+        <h2>Draft setup</h2>
+
+        @if (!string.IsNullOrWhiteSpace(message))
+        {
+            <p class="form-message">@message</p>
+        }
+
+        <label>
+            Supplier
+            <InputSelect @bind-Value="form.SupplierId" @bind-Value:after="SyncProductSelection">
+                <option value="0">Choose supplier</option>
+                @foreach (var supplier in suppliers)
+                {
+                    <option value="@supplier.Id">@supplier.Name</option>
+                }
+            </InputSelect>
+        </label>
+
+        <div class="form-grid">
+            <label>
+                First line product
+                <InputSelect @bind-Value="form.ProductId" @bind-Value:after="SyncSuggestedQuantity">
+                    <option value="0">No line yet</option>
+                    @foreach (var product in SupplierProducts)
+                    {
+                        <option value="@product.Id">@product.Name (@product.CurrentStock / @product.ReorderLevel)</option>
+                    }
+                </InputSelect>
+            </label>
+            <label>
+                Ordered quantity
+                <InputNumber @bind-Value="form.OrderedQuantity" />
+            </label>
+        </div>
+
+        @if (SelectedProduct is not null)
+        {
+            <div class="record-summary compact-summary">
+                <span>Suggested reorder</span>
+                <strong>@SuggestedQuantity units</strong>
+                <small>@SelectedProduct.Name has @SelectedProduct.CurrentStock in stock and reorder level @SelectedProduct.ReorderLevel.</small>
+            </div>
+        }
+
+        <div class="form-actions">
+            <button class="btn btn-primary" type="submit" disabled="@saving">Create draft</button>
+            <a class="button-link" href="purchase-orders">Cancel</a>
+        </div>
+    </EditForm>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "supplierId")]
+    public int? SupplierId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "productId")]
+    public int? ProductId { get; set; }
+
+    private bool loading = true;
+    private bool saving;
+    private string? message;
+    private NewPurchaseOrderForm form = new();
+    private List<Supplier> suppliers = [];
+    private List<Product> products = [];
+
+    private IEnumerable<Product> SupplierProducts =>
+        products.Where(product => product.SupplierId == form.SupplierId);
+
+    private Product? SelectedProduct =>
+        products.FirstOrDefault(product => product.Id == form.ProductId);
+
+    private int SuggestedQuantity =>
+        SelectedProduct is null
+            ? 1
+            : Math.Max(SelectedProduct.ReorderLevel - SelectedProduct.CurrentStock, 1);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true;
+        suppliers = await Inventory.GetSuppliersAsync();
+        products = await Inventory.GetProductsAsync();
+
+        form.SupplierId = SupplierId.GetValueOrDefault();
+        form.ProductId = ProductId.GetValueOrDefault();
+        SyncProductSelection();
+        SyncSuggestedQuantity();
+        loading = false;
+    }
+
+    private async Task CreateAsync()
+    {
+        saving = true;
+        var lines = form.ProductId > 0
+            ? new List<PurchaseOrderLineInput> { new(form.ProductId, form.OrderedQuantity) }
+            : [];
+
+        var result = await Inventory.CreatePurchaseOrderAsync(form.SupplierId, lines);
+        if (result.Succeeded && result.Order is not null)
+        {
+            Navigation.NavigateTo($"/purchase-orders/{result.Order.Id}");
+            return;
+        }
+
+        message = result.Message;
+        saving = false;
+    }
+
+    private void SyncProductSelection()
+    {
+        if (form.ProductId > 0 && SupplierProducts.Any(product => product.Id == form.ProductId))
+        {
+            return;
+        }
+
+        form.ProductId = SupplierProducts
+            .OrderBy(product => product.CurrentStock > product.ReorderLevel)
+            .ThenBy(product => product.Name)
+            .FirstOrDefault()?.Id ?? 0;
+    }
+
+    private void SyncSuggestedQuantity()
+    {
+        form.OrderedQuantity = SuggestedQuantity;
+    }
+
+    private sealed class NewPurchaseOrderForm
+    {
+        [Range(1, int.MaxValue, ErrorMessage = "Choose a supplier.")]
+        public int SupplierId { get; set; }
+
+        public int ProductId { get; set; }
+
+        [Range(1, int.MaxValue, ErrorMessage = "Ordered quantity must be greater than zero.")]
+        public int OrderedQuantity { get; set; } = 1;
+    }
+}

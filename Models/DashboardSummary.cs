@@ -13,4 +13,5 @@ public sealed record DashboardSummary(
     IReadOnlyList<Product> LowStockProducts,
     IReadOnlyList<StockMovement> RecentMovements,
     IReadOnlyList<SupplierDashboardRow> SupplierRows,
-    inventory_admin.Dtos.SupplierDashboardOverviewDto SupplierOverview);
+    inventory_admin.Dtos.SupplierDashboardOverviewDto SupplierOverview,
+    AiUsageSummary AiUsage);

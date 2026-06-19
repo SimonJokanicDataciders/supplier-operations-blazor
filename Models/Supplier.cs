@@ -45,4 +45,6 @@ public class Supplier
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     public List<Product> Products { get; set; } = [];
+
+    public List<PurchaseOrder> PurchaseOrders { get; set; } = [];
 }
