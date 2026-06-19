@@ -1,0 +1,15 @@
+<section class="stat-grid">
+    <StatTile Label="Products" Value="@Summary.ProductCount.ToString()" Detail="supplied products" />
+    <StatTile Label="Low stock" Value="@Summary.LowStockCount.ToString()" Detail="needs attention" />
+    <StatTile Label="Stock value" Value="@Summary.InventoryValue.ToString("C")" Detail="current stock value" />
+    <StatTile Label="Latest movement" Value="@LatestMovementText" Detail="supplier activity" />
+</section>
+
+@code {
+    [Parameter]
+    public SupplierOperationSummary Summary { get; set; } = new();
+
+    private string LatestMovementText => Summary.LatestMovementAt is null
+        ? "-"
+        : Summary.LatestMovementAt.Value.ToLocalTime().ToString("g");
+}

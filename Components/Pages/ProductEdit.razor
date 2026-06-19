@@ -1,0 +1,171 @@
+@page "/products/new"
+@page "/products/{Id:int}/edit"
+@rendermode InteractiveServer
+@inject InventoryService Inventory
+@inject NavigationManager Navigation
+
+<PageTitle>@(Id is null ? "New Product" : "Edit Product")</PageTitle>
+
+<header class="page-header">
+    <div>
+        <span>@HeaderEyebrow</span>
+        <h1>@(Id is null ? "New product" : "Edit product")</h1>
+        <p>@HeaderDescription</p>
+    </div>
+    <a class="button-link" href="@BackHref">@BackText</a>
+</header>
+
+@if (loading)
+{
+    <p><em>Loading product form...</em></p>
+}
+else if (notFound)
+{
+    <section class="panel">
+        <h2>Product not found</h2>
+        <p>The requested product does not exist.</p>
+    </section>
+}
+else
+{
+    <EditForm Model="product" OnValidSubmit="SaveAsync" FormName="product-form" class="admin-form">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        @if (SelectedSupplier is not null)
+        {
+            <div class="section-heading">
+                <h2>Supplier context</h2>
+                <span>@SelectedSupplier.Name / @SelectedSupplier.CountryCode</span>
+            </div>
+        }
+
+        <label>
+            Name
+            <InputText @bind-Value="product.Name" />
+        </label>
+
+        <label>
+            SKU
+            <InputText @bind-Value="product.Sku" />
+        </label>
+
+        <label>
+            Description
+            <InputTextArea @bind-Value="product.Description" />
+        </label>
+
+        <div class="form-grid">
+            <label>
+                Category
+                <InputSelect @bind-Value="product.CategoryId">
+                    <option value="0">Choose category</option>
+                    @foreach (var category in categories)
+                    {
+                        <option value="@category.Id">@category.Name</option>
+                    }
+                </InputSelect>
+            </label>
+
+            <label>
+                Supplier
+                <InputSelect @bind-Value="product.SupplierId">
+                    <option value="0">Choose supplier</option>
+                    @foreach (var supplier in suppliers)
+                    {
+                        <option value="@supplier.Id">@supplier.Name</option>
+                    }
+                </InputSelect>
+            </label>
+        </div>
+
+        <div class="form-grid">
+            <label>
+                Current stock
+                <InputNumber @bind-Value="product.CurrentStock" />
+            </label>
+            <label>
+                Reorder level
+                <InputNumber @bind-Value="product.ReorderLevel" />
+            </label>
+            <label>
+                Unit price
+                <InputNumber @bind-Value="product.UnitPrice" />
+            </label>
+        </div>
+
+        <div class="form-actions">
+            <button class="btn btn-primary" disabled="@saving" type="submit">@(saving ? "Saving..." : "Save product")</button>
+            <a class="button-link" href="@BackHref">Cancel</a>
+        </div>
+    </EditForm>
+}
+
+@code {
+    [Parameter]
+    public int? Id { get; set; }
+
+    [SupplyParameterFromQuery(Name = "supplierId")]
+    public int? SupplierId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "returnToSupplier")]
+    public bool ReturnToSupplier { get; set; }
+
+    private bool loading = true;
+    private bool saving;
+    private bool notFound;
+    private Product product = new();
+    private List<Category> categories = [];
+    private List<Supplier> suppliers = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true;
+        categories = await Inventory.GetCategoriesAsync();
+        suppliers = await Inventory.GetSuppliersAsync();
+
+        if (Id is null)
+        {
+            product = new Product
+            {
+                SupplierId = SupplierId.GetValueOrDefault()
+            };
+        }
+        else
+        {
+            product = await Inventory.GetProductAsync(Id.Value) ?? new Product();
+            notFound = product.Id == 0;
+        }
+
+        loading = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        saving = true;
+        await Inventory.SaveProductAsync(product);
+        Navigation.NavigateTo(BackHref);
+    }
+
+    private Supplier? SelectedSupplier =>
+        suppliers.FirstOrDefault(supplier => supplier.Id == product.SupplierId);
+
+    private bool ShouldReturnToSupplier =>
+        ReturnToSupplier && SupplierId is > 0;
+
+    private string BackHref =>
+        ShouldReturnToSupplier ? $"/suppliers/{SupplierId}" : "/products";
+
+    private string BackText =>
+        ShouldReturnToSupplier ? "Back to supplier" : "Back to products";
+
+    private string HeaderEyebrow =>
+        SelectedSupplier is null ? "Inventory" : "Supplier product";
+
+    private string HeaderDescription =>
+        SelectedSupplier is null
+            ? "Practice Blazor forms, select inputs, validation, and EF Core saves."
+            : Id is null
+                ? $"Creating product for {SelectedSupplier.Name}."
+                : $"Assigned supplier: {SelectedSupplier.Name}.";
+}

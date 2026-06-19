@@ -1,0 +1,17 @@
+@if (Product.CurrentStock <= 0)
+{
+    <span class="badge badge-danger">Out</span>
+}
+else if (Product.CurrentStock <= Product.ReorderLevel)
+{
+    <span class="badge badge-warn">Low stock</span>
+}
+else
+{
+    <span class="badge badge-ok">OK</span>
+}
+
+@code {
+    [Parameter]
+    public Product Product { get; set; } = new();
+}

@@ -1,0 +1,135 @@
+@page "/suppliers"
+@rendermode InteractiveServer
+@inject InventoryService Inventory
+
+<PageTitle>Suppliers</PageTitle>
+
+<header class="page-header">
+    <div>
+        <span>Inventory</span>
+        <h1>Suppliers</h1>
+        <p>Maintain supplier records used by product forms.</p>
+    </div>
+    <a class="button-link primary" href="suppliers/import">Import supplier</a>
+</header>
+
+<section class="split-grid">
+    <EditForm Model="supplierForm" OnValidSubmit="SaveSupplierAsync" FormName="supplier-form" class="admin-form">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+        <h2>@(supplierForm.Id == 0 ? "New supplier" : "Edit supplier")</h2>
+
+        <label>
+            Name
+            <InputText @bind-Value="supplierForm.Name" />
+        </label>
+        <label>
+            Country code
+            <InputText @bind-Value="supplierForm.CountryCode" />
+        </label>
+        <label>
+            Contact email
+            <InputText @bind-Value="supplierForm.ContactEmail" />
+        </label>
+        <label>
+            Website URL
+            <InputText @bind-Value="supplierForm.WebsiteUrl" />
+        </label>
+        <label>
+            Industry
+            <InputText @bind-Value="supplierForm.Industry" />
+        </label>
+        <label>
+            Operational notes
+            <InputTextArea @bind-Value="supplierForm.OperationalNotes" />
+        </label>
+        <div class="form-actions">
+            <button class="btn btn-primary" type="submit">Save supplier</button>
+            <button class="btn btn-secondary" type="button" @onclick="ResetSupplierForm">Reset</button>
+        </div>
+    </EditForm>
+
+    <section class="panel">
+        <div class="section-heading">
+            <h2>Supplier records</h2>
+            <span>@suppliers.Count total</span>
+        </div>
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Country</th>
+                    <th>Source</th>
+                    <th>Products</th>
+                    <th>Contact</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var supplier in suppliers)
+                {
+                    <tr>
+                        <td><strong>@supplier.Name</strong></td>
+                        <td>@supplier.CountryCode</td>
+                        <td><SupplierSourceBadge Supplier="supplier" /></td>
+                        <td>@supplier.Products.Count</td>
+                        <td>@(supplier.ContactEmail ?? supplier.WebsiteUrl ?? "-")</td>
+                        <td>
+                            <div class="form-actions">
+                                <a class="button-link" href="@($"suppliers/{supplier.Id}")">View</a>
+                                <button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => EditSupplier(supplier)">Edit</button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </section>
+</section>
+
+@code {
+    private Supplier supplierForm = new();
+    private List<Supplier> suppliers = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSuppliersAsync();
+    }
+
+    private async Task LoadSuppliersAsync()
+    {
+        suppliers = await Inventory.GetSuppliersAsync();
+    }
+
+    private async Task SaveSupplierAsync()
+    {
+        await Inventory.SaveSupplierAsync(supplierForm);
+        ResetSupplierForm();
+        await LoadSuppliersAsync();
+    }
+
+    private void EditSupplier(Supplier supplier)
+    {
+        supplierForm = new Supplier
+        {
+            Id = supplier.Id,
+            Name = supplier.Name,
+            CountryCode = supplier.CountryCode,
+            ContactEmail = supplier.ContactEmail,
+            WebsiteUrl = supplier.WebsiteUrl,
+            Industry = supplier.Industry,
+            OperationalNotes = supplier.OperationalNotes,
+            SourceSystem = supplier.SourceSystem,
+            ExternalSupplierKey = supplier.ExternalSupplierKey,
+            ResearchUrl = supplier.ResearchUrl,
+            ImportedAt = supplier.ImportedAt,
+            UpdatedAt = supplier.UpdatedAt,
+            CreatedAt = supplier.CreatedAt,
+        };
+    }
+
+    private void ResetSupplierForm()
+    {
+        supplierForm = new Supplier();
+    }
+}

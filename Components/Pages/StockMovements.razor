@@ -1,0 +1,113 @@
+@page "/stock-movements"
+@rendermode InteractiveServer
+@inject InventoryService Inventory
+
+<PageTitle>Stock Movements</PageTitle>
+
+<header class="page-header">
+    <div>
+        <span>Inventory</span>
+        <h1>Stock movements</h1>
+        <p>Record stock in and stock out while protecting inventory from invalid negative stock.</p>
+    </div>
+</header>
+
+<section class="split-grid">
+    <EditForm Model="movementForm" OnValidSubmit="SaveMovementAsync" FormName="stock-movement-form" class="admin-form">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+        <h2>New stock movement</h2>
+
+        @if (!string.IsNullOrWhiteSpace(message))
+        {
+            <p class="form-message">@message</p>
+        }
+
+        <label>
+            Product
+            <InputSelect @bind-Value="movementForm.ProductId">
+                <option value="0">Choose product</option>
+                @foreach (var product in products)
+                {
+                    <option value="@product.Id">@product.Name (@product.CurrentStock in stock)</option>
+                }
+            </InputSelect>
+        </label>
+        <label>
+            Movement type
+            <InputSelect @bind-Value="movementForm.MovementType">
+                <option value="@StockMovementType.StockIn">Stock in</option>
+                <option value="@StockMovementType.StockOut">Stock out</option>
+            </InputSelect>
+        </label>
+        <label>
+            Quantity
+            <InputNumber @bind-Value="movementForm.Quantity" />
+        </label>
+        <label>
+            Reason
+            <InputTextArea @bind-Value="movementForm.Reason" />
+        </label>
+        <button class="btn btn-primary" type="submit">Save movement</button>
+    </EditForm>
+
+    <section class="panel">
+        <div class="section-heading">
+            <h2>Movement history</h2>
+            <span>@movements.Count records</span>
+        </div>
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Created</th>
+                    <th>Product</th>
+                    <th>Type</th>
+                    <th>Qty</th>
+                    <th>Reason</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var movement in movements)
+                {
+                    <tr>
+                        <td>@movement.CreatedAt.ToLocalTime().ToString("g")</td>
+                        <td>@(movement.Product?.Name ?? "-")</td>
+                        <td>@movement.MovementType</td>
+                        <td>@movement.Quantity</td>
+                        <td>@movement.Reason</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </section>
+</section>
+
+@code {
+    private StockMovement movementForm = new();
+    private List<Product> products = [];
+    private List<StockMovement> movements = [];
+    private string? message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        products = await Inventory.GetProductsAsync();
+        movements = await Inventory.GetStockMovementsAsync();
+    }
+
+    private async Task SaveMovementAsync()
+    {
+        var result = await Inventory.AddStockMovementAsync(movementForm);
+        message = result.Message;
+
+        if (result.Succeeded)
+        {
+            movementForm = new StockMovement();
+            await LoadAsync();
+        }
+    }
+}

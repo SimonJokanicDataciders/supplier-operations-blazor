@@ -1,0 +1,251 @@
+@page "/suppliers/{Id:int}"
+@rendermode InteractiveServer
+@using System.ComponentModel.DataAnnotations
+@inject InventoryService Inventory
+
+<PageTitle>@(supplier?.Name ?? "Supplier")</PageTitle>
+
+@if (loading)
+{
+    <p><em>Loading supplier...</em></p>
+}
+else if (supplier is null || summary is null)
+{
+    <section class="panel">
+        <div class="section-heading">
+            <h2>Supplier not found</h2>
+        </div>
+        <p>The requested supplier does not exist.</p>
+        <a class="button-link" href="suppliers">Back to suppliers</a>
+    </section>
+}
+else
+{
+    var hasProducts = supplier.Products.Count > 0;
+
+    <header class="page-header">
+        <div>
+            <span>Supplier operations</span>
+            <h1>@supplier.Name</h1>
+            <p>@supplier.CountryCode / @(supplier.Industry ?? "No industry")</p>
+        </div>
+        <div class="form-actions">
+            <a class="button-link primary" href="@($"products/new?supplierId={supplier.Id}")">@(hasProducts ? "New product" : "Add first product")</a>
+            <a class="button-link" href="suppliers">Back</a>
+        </div>
+    </header>
+
+    <SupplierOperationsSummary Summary="summary" />
+
+    <section class="panel-grid">
+        @if (!hasProducts)
+        {
+            <article class="panel setup-panel">
+                <div class="section-heading">
+                    <h2>Operational setup needed</h2>
+                    <span>0 products</span>
+                </div>
+                <p>
+                    This supplier has been imported or researched, but it is not operational yet because no products are connected to it.
+                    Add the first product to make stock levels, low-stock checks, and movement history useful for this supplier.
+                </p>
+                <div class="form-actions setup-actions">
+                    <a class="button-link primary" href="@($"products/new?supplierId={supplier.Id}")">Add first product</a>
+                    <a class="button-link" href="suppliers">Edit supplier details</a>
+                    <a class="button-link" href="suppliers">Back to suppliers</a>
+                </div>
+            </article>
+        }
+        else
+        {
+            <article class="panel">
+                <div class="section-heading">
+                    <h2>Products supplied</h2>
+                    <span>@supplier.Products.Count products</span>
+                </div>
+                <ProductTable Products="supplier.Products" />
+            </article>
+        }
+
+        @if (hasProducts)
+        {
+            <EditForm Model="stockInForm" OnValidSubmit="SaveStockInAsync" FormName="supplier-stock-in-form" class="admin-form">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                <h2>Quick stock in</h2>
+
+                @if (!string.IsNullOrWhiteSpace(stockInMessage))
+                {
+                    <p class="form-message">@stockInMessage</p>
+                }
+
+                <label>
+                    Product
+                    <InputSelect @bind-Value="stockInForm.ProductId">
+                        @foreach (var product in supplier.Products.OrderBy(product => product.Name))
+                        {
+                            <option value="@product.Id">@product.Name (@product.CurrentStock in stock)</option>
+                        }
+                    </InputSelect>
+                </label>
+                <label>
+                    Quantity
+                    <InputNumber @bind-Value="stockInForm.Quantity" />
+                </label>
+                <label>
+                    Reason
+                    <InputTextArea @bind-Value="stockInForm.Reason" />
+                </label>
+                <button class="btn btn-primary" type="submit" disabled="@savingStockIn">Save stock in</button>
+            </EditForm>
+        }
+
+        <article class="panel">
+            <div class="section-heading">
+                <h2>Source details</h2>
+                <span><SupplierSourceBadge Supplier="supplier" /></span>
+            </div>
+            <dl class="detail-list">
+                <dt>Website</dt>
+                <dd>@FormatLink(supplier.WebsiteUrl)</dd>
+                <dt>Research link</dt>
+                <dd>@FormatLink(supplier.ResearchUrl)</dd>
+                <dt>External key</dt>
+                <dd>@(supplier.ExternalSupplierKey ?? "-")</dd>
+                <dt>Imported</dt>
+                <dd>@(supplier.ImportedAt?.ToLocalTime().ToString("g") ?? "-")</dd>
+            </dl>
+            @if (!string.IsNullOrWhiteSpace(supplier.OperationalNotes))
+            {
+                <p>@supplier.OperationalNotes</p>
+            }
+        </article>
+
+        @if (hasProducts)
+        {
+            <article class="panel">
+                <div class="section-heading">
+                    <h2>Low-stock products</h2>
+                    <span>@lowStockProducts.Count products</span>
+                </div>
+                <ProductTable Products="lowStockProducts" />
+            </article>
+
+            <article class="panel">
+                <div class="section-heading">
+                    <h2>Movement timeline</h2>
+                    <span>@movements.Count records</span>
+                </div>
+                <StockMovementTimeline Movements="movements" />
+            </article>
+        }
+    </section>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private bool loading = true;
+    private Supplier? supplier;
+    private SupplierOperationSummary? summary;
+    private List<Product> lowStockProducts = [];
+    private List<StockMovement> movements = [];
+    private QuickStockInForm stockInForm = new();
+    private string? stockInMessage;
+    private bool savingStockIn;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true;
+        stockInMessage = null;
+        await LoadSupplierAsync();
+        loading = false;
+    }
+
+    private async Task LoadSupplierAsync()
+    {
+        supplier = await Inventory.GetSupplierDetailAsync(Id);
+        if (supplier is not null)
+        {
+            summary = await Inventory.GetSupplierOperationSummaryAsync(Id);
+            lowStockProducts = supplier.Products
+                .Where(product => product.CurrentStock <= product.ReorderLevel)
+                .OrderBy(product => product.CurrentStock)
+                .ToList();
+            movements = await Inventory.GetRecentMovementsForSupplierAsync(Id);
+            EnsureStockInProductSelection();
+        }
+        else
+        {
+            summary = null;
+            lowStockProducts = [];
+            movements = [];
+            stockInForm = new();
+        }
+    }
+
+    private async Task SaveStockInAsync()
+    {
+        savingStockIn = true;
+        var result = await Inventory.StockInAsync(
+            stockInForm.ProductId,
+            stockInForm.Quantity,
+            stockInForm.Reason);
+
+        stockInMessage = result.Message;
+
+        if (result.Succeeded)
+        {
+            var selectedProductId = stockInForm.ProductId;
+            stockInForm = new QuickStockInForm
+            {
+                ProductId = selectedProductId
+            };
+            await LoadSupplierAsync();
+        }
+
+        savingStockIn = false;
+    }
+
+    private void EnsureStockInProductSelection()
+    {
+        if (supplier is null || supplier.Products.Count == 0)
+        {
+            stockInForm = new();
+            return;
+        }
+
+        if (!supplier.Products.Any(product => product.Id == stockInForm.ProductId))
+        {
+            stockInForm.ProductId = supplier.Products
+                .OrderBy(product => product.Name)
+                .First()
+                .Id;
+        }
+    }
+
+    private static MarkupString FormatLink(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return new MarkupString("-");
+        }
+
+        var encoded = System.Net.WebUtility.HtmlEncode(url);
+        return new MarkupString($"<a href=\"{encoded}\" target=\"_blank\" rel=\"noreferrer\">{encoded}</a>");
+    }
+
+    private sealed class QuickStockInForm
+    {
+        [Range(1, int.MaxValue, ErrorMessage = "Choose a product.")]
+        public int ProductId { get; set; }
+
+        [Range(1, int.MaxValue, ErrorMessage = "Quantity must be greater than zero.")]
+        public int Quantity { get; set; } = 1;
+
+        [Required]
+        [StringLength(500)]
+        public string Reason { get; set; } = string.Empty;
+    }
+}

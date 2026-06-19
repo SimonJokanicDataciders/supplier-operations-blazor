@@ -1,0 +1,51 @@
+<table class="admin-table">
+    <thead>
+        <tr>
+            <th>Product</th>
+            <th>SKU</th>
+            <th>Category</th>
+            <th>Supplier</th>
+            <th>Stock</th>
+            <th>Value</th>
+            <th>Status</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @if (Products.Count == 0)
+        {
+            <tr>
+                <td colspan="8" class="empty-cell">No products match the current view.</td>
+            </tr>
+        }
+        else
+        {
+            @foreach (var product in Products)
+            {
+                <tr>
+                    <td>
+                        <strong>@product.Name</strong>
+                        @if (!string.IsNullOrWhiteSpace(product.Description))
+                        {
+                            <small>@product.Description</small>
+                        }
+                    </td>
+                    <td><code>@product.Sku</code></td>
+                    <td>@(product.Category?.Name ?? "-")</td>
+                    <td>@(product.Supplier?.Name ?? "-")</td>
+                    <td>@product.CurrentStock / @product.ReorderLevel</td>
+                    <td>@((product.CurrentStock * product.UnitPrice).ToString("C"))</td>
+                    <td><LowStockBadge Product="product" /></td>
+                    <td>
+                        <a class="button-link" href="@($"products/{product.Id}/edit")">Edit</a>
+                    </td>
+                </tr>
+            }
+        }
+    </tbody>
+</table>
+
+@code {
+    [Parameter]
+    public IReadOnlyList<Product> Products { get; set; } = [];
+}

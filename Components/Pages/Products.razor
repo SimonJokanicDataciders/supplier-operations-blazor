@@ -1,0 +1,71 @@
+@page "/products"
+@rendermode InteractiveServer
+@inject InventoryService Inventory
+
+<PageTitle>Products</PageTitle>
+
+<header class="page-header">
+    <div>
+        <span>Inventory</span>
+        <h1>Products</h1>
+        <p>Search, filter, and maintain stocked products.</p>
+    </div>
+    <a class="button-link primary" href="products/new">New product</a>
+</header>
+
+<section class="toolbar-panel">
+    <label>
+        Search
+        <input @bind="search" placeholder="Name or SKU" />
+    </label>
+    <label>
+        Category
+        <select @bind="categoryId">
+            <option value="">All categories</option>
+            @foreach (var category in categories)
+            {
+                <option value="@category.Id">@category.Name</option>
+            }
+        </select>
+    </label>
+    <label>
+        Supplier
+        <select @bind="supplierId">
+            <option value="">All suppliers</option>
+            @foreach (var supplier in suppliers)
+            {
+                <option value="@supplier.Id">@supplier.Name</option>
+            }
+        </select>
+    </label>
+    <button class="btn btn-primary" type="button" @onclick="LoadProductsAsync">Apply filters</button>
+</section>
+
+<section class="panel">
+    <div class="section-heading">
+        <h2>Product records</h2>
+        <span>@products.Count shown</span>
+    </div>
+    <ProductTable Products="products" />
+</section>
+
+@code {
+    private string? search;
+    private int? categoryId;
+    private int? supplierId;
+    private List<Product> products = [];
+    private List<Category> categories = [];
+    private List<Supplier> suppliers = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        categories = await Inventory.GetCategoriesAsync();
+        suppliers = await Inventory.GetSuppliersAsync();
+        await LoadProductsAsync();
+    }
+
+    private async Task LoadProductsAsync()
+    {
+        products = await Inventory.GetProductsAsync(search, categoryId, supplierId);
+    }
+}

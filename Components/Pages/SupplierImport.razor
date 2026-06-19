@@ -1,0 +1,147 @@
+@page "/suppliers/import"
+@rendermode InteractiveServer
+@inject InventoryService Inventory
+@inject NavigationManager Navigation
+
+<PageTitle>Import Supplier</PageTitle>
+
+<header class="page-header">
+    <div>
+        <span>Supplier bridge</span>
+        <h1>Import supplier</h1>
+        <p>Paste a Supplier Intelligence operations payload and create or update an operational supplier record.</p>
+    </div>
+    <a class="button-link" href="suppliers">Back to suppliers</a>
+</header>
+
+<section class="split-grid">
+    <EditForm Model="form" OnValidSubmit="PreviewAsync" FormName="supplier-import-form" class="admin-form">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+        <h2>Operations payload</h2>
+
+        <label>
+            Supplier Intelligence JSON
+            <InputTextArea @bind-Value="form.PayloadJson" class="payload-input" />
+        </label>
+
+        <details>
+            <summary>Manual fallback fields</summary>
+            <div class="form-grid">
+                <label>
+                    Name
+                    <InputText @bind-Value="form.Name" />
+                </label>
+                <label>
+                    Country code
+                    <InputText @bind-Value="form.CountryCode" />
+                </label>
+            </div>
+            <label>
+                Website URL
+                <InputText @bind-Value="form.WebsiteUrl" />
+            </label>
+            <label>
+                Operational notes
+                <InputTextArea @bind-Value="form.OperationalNotes" />
+            </label>
+        </details>
+
+        <div class="form-actions">
+            <button class="btn btn-primary" disabled="@busy" type="submit">@(busy ? "Checking..." : "Preview import")</button>
+            <button class="btn" type="button" @onclick="ClearForm">Clear</button>
+        </div>
+    </EditForm>
+
+    <section class="panel">
+        <div class="section-heading">
+            <h2>Import preview</h2>
+            <span>@(preview is null ? "waiting for payload" : (preview.MatchedExisting ? "update existing" : "new supplier"))</span>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(message))
+        {
+            <p class="form-message">@message</p>
+        }
+
+        @if (preview is null)
+        {
+            <p class="muted">Paste JSON copied from Supplier Intelligence, then preview it before importing.</p>
+        }
+        else
+        {
+            <div class="record-summary">
+                <strong>@preview.Name</strong>
+                <span>@preview.CountryCode / @(preview.Industry ?? "No industry")</span>
+                <small>@preview.MatchMessage</small>
+            </div>
+
+            <dl class="detail-list">
+                <dt>Source</dt>
+                <dd>@(preview.SourceSystem ?? "Manual")</dd>
+                <dt>External key</dt>
+                <dd>@(preview.ExternalSupplierKey ?? "-")</dd>
+                <dt>Website</dt>
+                <dd>@(preview.WebsiteUrl ?? "-")</dd>
+            </dl>
+
+            <button class="btn btn-primary" disabled="@busy" type="button" @onclick="ImportAsync">
+                @(preview.MatchedExisting ? "Update supplier" : "Import supplier")
+            </button>
+        }
+    </section>
+</section>
+
+@code {
+    private SupplierOperationsImportRequest form = new();
+    private SupplierImportPreview? preview;
+    private bool busy;
+    private string? message;
+
+    private async Task PreviewAsync()
+    {
+        busy = true;
+        message = null;
+
+        try
+        {
+            preview = await Inventory.PreviewSupplierImportAsync(form);
+        }
+        catch (Exception ex)
+        {
+            preview = null;
+            message = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task ImportAsync()
+    {
+        busy = true;
+        message = null;
+
+        try
+        {
+            var supplier = await Inventory.ImportSupplierAsync(form);
+            Navigation.NavigateTo($"suppliers/{supplier.Id}");
+        }
+        catch (Exception ex)
+        {
+            message = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private void ClearForm()
+    {
+        form = new SupplierOperationsImportRequest();
+        preview = null;
+        message = null;
+    }
+}

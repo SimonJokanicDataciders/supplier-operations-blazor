@@ -1,0 +1,24 @@
+﻿@inherits LayoutComponentBase
+
+<div class="page app-shell">
+    <div class="sidebar app-sidebar">
+        <NavMenu />
+    </div>
+
+    <main class="detail">
+        <div class="top-row">
+            <strong>Inventory Operations</strong>
+            <span>Blazor + EF Core workspace</span>
+        </div>
+
+        <article class="content detail-content">
+            @Body
+        </article>
+    </main>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>

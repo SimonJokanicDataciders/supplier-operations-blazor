@@ -1,0 +1,100 @@
+@page "/categories"
+@rendermode InteractiveServer
+@inject InventoryService Inventory
+
+<PageTitle>Categories</PageTitle>
+
+<header class="page-header">
+    <div>
+        <span>Inventory</span>
+        <h1>Categories</h1>
+        <p>Group products for filtering, reporting, and stock review.</p>
+    </div>
+</header>
+
+<section class="split-grid">
+    <EditForm Model="categoryForm" OnValidSubmit="SaveCategoryAsync" FormName="category-form" class="admin-form">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+        <h2>@(categoryForm.Id == 0 ? "New category" : "Edit category")</h2>
+
+        <label>
+            Name
+            <InputText @bind-Value="categoryForm.Name" />
+        </label>
+        <label>
+            Description
+            <InputTextArea @bind-Value="categoryForm.Description" />
+        </label>
+        <div class="form-actions">
+            <button class="btn btn-primary" type="submit">Save category</button>
+            <button class="btn btn-secondary" type="button" @onclick="ResetCategoryForm">Reset</button>
+        </div>
+    </EditForm>
+
+    <section class="panel">
+        <div class="section-heading">
+            <h2>Category records</h2>
+            <span>@categories.Count total</span>
+        </div>
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Products</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var category in categories)
+                {
+                    <tr>
+                        <td><strong>@category.Name</strong></td>
+                        <td>@category.Description</td>
+                        <td>@category.Products.Count</td>
+                        <td><button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => EditCategory(category)">Edit</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </section>
+</section>
+
+@code {
+    private Category categoryForm = new();
+    private List<Category> categories = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCategoriesAsync();
+    }
+
+    private async Task LoadCategoriesAsync()
+    {
+        categories = await Inventory.GetCategoriesAsync();
+    }
+
+    private async Task SaveCategoryAsync()
+    {
+        await Inventory.SaveCategoryAsync(categoryForm);
+        ResetCategoryForm();
+        await LoadCategoriesAsync();
+    }
+
+    private void EditCategory(Category category)
+    {
+        categoryForm = new Category
+        {
+            Id = category.Id,
+            Name = category.Name,
+            Description = category.Description,
+            CreatedAt = category.CreatedAt,
+        };
+    }
+
+    private void ResetCategoryForm()
+    {
+        categoryForm = new Category();
+    }
+}

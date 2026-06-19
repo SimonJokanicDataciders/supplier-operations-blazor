@@ -1,0 +1,100 @@
+.page {
+    min-height: 100vh;
+}
+
+.app-shell {
+    display: grid;
+    grid-template-columns: 285px minmax(0, 1fr);
+    gap: 8px;
+    height: 100vh;
+    min-height: 100vh;
+    padding: 8px;
+}
+
+.app-sidebar,
+.detail {
+    background: #d6d9df;
+    border-color: #ffffff #6f7480 #6f7480 #ffffff;
+    border-style: solid;
+    border-width: 2px;
+    color: #111111;
+}
+
+.app-sidebar {
+    min-height: 0;
+    overflow: auto;
+    padding: 8px;
+}
+
+.detail {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: 0;
+    overflow: hidden;
+    padding: 8px;
+}
+
+.detail-content {
+    min-height: 0;
+    overflow: auto;
+}
+
+.top-row {
+    align-items: center;
+    background: linear-gradient(90deg, #123f86, #4c78b8);
+    border: 1px solid #0a2c66;
+    color: #ffffff;
+    display: flex;
+    gap: 16px;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    min-height: 28px;
+    padding: 4px 8px;
+}
+
+.top-row strong {
+    font-size: 12px;
+}
+
+.top-row span {
+    color: #e6edf8;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+@media (max-width: 900px) {
+    .app-shell {
+        grid-template-columns: 1fr;
+        height: auto;
+        min-height: 100vh;
+    }
+
+    .detail {
+        overflow: visible;
+    }
+
+    .detail-content {
+        overflow: visible;
+    }
+}
+
+#blazor-error-ui {
+    color-scheme: light only;
+    background: lightyellow;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    box-sizing: border-box;
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+    #blazor-error-ui .dismiss {
+        cursor: pointer;
+        position: absolute;
+        right: 0.75rem;
+        top: 0.5rem;
+    }

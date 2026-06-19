@@ -1,0 +1,60 @@
+﻿<div class="nav-header">
+    <div>
+        <a class="navbar-brand" href="">Inventory Admin</a>
+        <span>Supplier operations module</span>
+    </div>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="nav flex-column">
+        <div class="nav-group-label">Overview</div>
+
+        <div class="nav-item">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Dashboard
+            </NavLink>
+        </div>
+
+        <div class="nav-group-label">Records</div>
+
+        <div class="nav-item">
+            <NavLink class="nav-link" href="products">
+                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span>
+                Products
+            </NavLink>
+        </div>
+
+        <div class="nav-item">
+            <NavLink class="nav-link" href="suppliers">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span>
+                Suppliers
+            </NavLink>
+        </div>
+
+        <div class="nav-item">
+            <NavLink class="nav-link" href="suppliers/import">
+                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span>
+                Import supplier
+            </NavLink>
+        </div>
+
+        <div class="nav-group-label">Operations</div>
+
+        <div class="nav-item">
+            <NavLink class="nav-link" href="categories">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span>
+                Categories
+            </NavLink>
+        </div>
+
+        <div class="nav-item">
+            <NavLink class="nav-link" href="stock-movements">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span>
+                Stock movements
+            </NavLink>
+        </div>
+    </nav>
+</div>
+

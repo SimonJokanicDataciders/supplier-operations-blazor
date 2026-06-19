@@ -1,0 +1,117 @@
+@page "/"
+@rendermode InteractiveServer
+@inject DashboardService DashboardData
+
+<PageTitle>Inventory Admin</PageTitle>
+
+<header class="page-header">
+    <div>
+        <span>Inventory Admin</span>
+        <h1>Dashboard</h1>
+        <p>Current stock, low-stock risk, and recent inventory activity.</p>
+    </div>
+    <a class="button-link primary" href="products/new">New product</a>
+</header>
+
+@if (summary is null)
+{
+    <p><em>Loading inventory...</em></p>
+}
+else
+{
+    <section class="stat-grid">
+        <StatTile Label="Products" Value="@summary.ProductCount.ToString()" Detail="active records" />
+        <StatTile Label="Suppliers" Value="@summary.SupplierCount.ToString()" Detail="vendor records" />
+        <StatTile Label="Low stock" Value="@summary.LowStockCount.ToString()" Detail="needs review" />
+        <StatTile Label="Inventory value" Value="@summary.InventoryValue.ToString("C")" Detail="stock x unit price" />
+    </section>
+
+    <section class="panel-grid">
+        <article class="panel">
+            <div class="section-heading">
+                <h2>Low-stock products</h2>
+                <span>@summary.LowStockProducts.Count products</span>
+            </div>
+            @if (summary.LowStockProducts.Count == 0)
+            {
+                <p class="muted">No low-stock products.</p>
+            }
+            else
+            {
+                <ProductTable Products="@summary.LowStockProducts" />
+            }
+        </article>
+
+        <article class="panel">
+            <div class="section-heading">
+                <h2>Recent movements</h2>
+                <span>@summary.RecentMovements.Count records</span>
+            </div>
+            <table class="admin-table compact">
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>Type</th>
+                        <th>Qty</th>
+                        <th>Reason</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var movement in summary.RecentMovements)
+                    {
+                        <tr>
+                            <td>@(movement.Product?.Name ?? "-")</td>
+                            <td>@movement.MovementType</td>
+                            <td>@movement.Quantity</td>
+                            <td>@movement.Reason</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </article>
+
+        <article class="panel">
+            <div class="section-heading">
+                <h2>Supplier overview</h2>
+                <span>@summary.SupplierRows.Count suppliers</span>
+            </div>
+            <table class="admin-table compact">
+                <thead>
+                    <tr>
+                        <th>Supplier</th>
+                        <th>Products</th>
+                        <th>Low stock</th>
+                        <th>Value</th>
+                        <th>Latest movement</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var supplierRow in summary.SupplierRows)
+                    {
+                        <tr>
+                            <td>
+                                <strong>@supplierRow.SupplierName</strong>
+                                <small>@supplierRow.CountryCode / @(supplierRow.Industry ?? "No industry")</small>
+                            </td>
+                            <td>@supplierRow.ProductCount</td>
+                            <td>@supplierRow.LowStockCount</td>
+                            <td>@supplierRow.InventoryValue.ToString("C")</td>
+                            <td>@(supplierRow.LatestMovementAt?.ToLocalTime().ToString("g") ?? "-")</td>
+                            <td><a class="button-link" href="@($"suppliers/{supplierRow.SupplierId}")">View</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </article>
+    </section>
+}
+
+@code {
+    private DashboardSummary? summary;
+
+    protected override async Task OnInitializedAsync()
+    {
+        summary = await DashboardData.GetSummaryAsync();
+    }
+}

@@ -1,0 +1,13 @@
+@if (!string.IsNullOrWhiteSpace(Supplier.SourceSystem))
+{
+    <span class="badge badge-ok">@Supplier.SourceSystem</span>
+}
+else
+{
+    <span class="badge">Manual</span>
+}
+
+@code {
+    [Parameter]
+    public Supplier Supplier { get; set; } = new();
+}

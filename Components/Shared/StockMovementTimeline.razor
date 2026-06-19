@@ -1,0 +1,22 @@
+<div class="timeline-list">
+    @if (Movements.Count == 0)
+    {
+        <p class="muted">No stock movements recorded yet.</p>
+    }
+    else
+    {
+        @foreach (var movement in Movements)
+        {
+            <article class="timeline-item">
+                <strong>@movement.CreatedAt.ToLocalTime().ToString("g")</strong>
+                <span>@(movement.Product?.Name ?? "Unknown product")</span>
+                <small>@movement.MovementType / @movement.Quantity - @movement.Reason</small>
+            </article>
+        }
+    }
+</div>
+
+@code {
+    [Parameter]
+    public IReadOnlyList<StockMovement> Movements { get; set; } = [];
+}
