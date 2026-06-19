@@ -41,4 +41,6 @@ public class Product
     public Supplier? Supplier { get; set; }
 
     public List<StockMovement> StockMovements { get; set; } = [];
+
+    public List<PurchaseOrderLine> PurchaseOrderLines { get; set; } = [];
 }

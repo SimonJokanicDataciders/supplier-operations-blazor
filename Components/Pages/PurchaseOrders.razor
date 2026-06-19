@@ -1,0 +1,81 @@
+@page "/purchase-orders"
+@rendermode InteractiveServer
+@inject InventoryService Inventory
+
+<PageTitle>Purchase Orders</PageTitle>
+
+<header class="page-header">
+    <div>
+        <span>Operations</span>
+        <h1>Purchase orders</h1>
+        <p>Draft supplier orders, send them, and receive stock into inventory.</p>
+    </div>
+    <a class="button-link primary" href="purchase-orders/new">New purchase order</a>
+</header>
+
+@if (orders is null)
+{
+    <p><em>Loading purchase orders...</em></p>
+}
+else
+{
+    <section class="panel">
+        <div class="section-heading">
+            <h2>Order queue</h2>
+            <span>@orders.Count records</span>
+        </div>
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>PO</th>
+                    <th>Supplier</th>
+                    <th>Status</th>
+                    <th>Lines</th>
+                    <th>Units</th>
+                    <th>Created</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (orders.Count == 0)
+                {
+                    <tr>
+                        <td colspan="7" class="empty-cell">No purchase orders yet.</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var order in orders)
+                    {
+                        <tr>
+                            <td><strong>PO-@order.Id.ToString("0000")</strong></td>
+                            <td>@(order.Supplier?.Name ?? "-")</td>
+                            <td><span class="@StatusClass(order.Status)">@order.Status</span></td>
+                            <td>@order.Lines.Count</td>
+                            <td>@order.Lines.Sum(line => line.ReceivedQuantity) / @order.Lines.Sum(line => line.OrderedQuantity)</td>
+                            <td>@order.CreatedAt.ToLocalTime().ToString("g")</td>
+                            <td><a class="button-link" href="@($"purchase-orders/{order.Id}")">Open</a></td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </section>
+}
+
+@code {
+    private List<PurchaseOrder>? orders;
+
+    protected override async Task OnInitializedAsync()
+    {
+        orders = await Inventory.GetPurchaseOrdersAsync();
+    }
+
+    private static string StatusClass(PurchaseOrderStatus status) => status switch
+    {
+        PurchaseOrderStatus.Received => "badge badge-ok",
+        PurchaseOrderStatus.Cancelled => "badge badge-danger",
+        PurchaseOrderStatus.PartiallyReceived => "badge badge-warn",
+        _ => "badge"
+    };
+}

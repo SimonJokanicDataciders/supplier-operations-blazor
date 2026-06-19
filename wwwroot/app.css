@@ -13,6 +13,12 @@
     --warn: #a05a00;
 }
 
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
 html,
 body {
     background:
@@ -25,6 +31,8 @@ body {
     font-size: 13px;
     line-height: 1.35;
     margin: 0;
+    max-width: 100%;
+    overflow-x: hidden;
 }
 
 a,
@@ -36,6 +44,7 @@ a,
     align-content: start;
     display: grid;
     gap: 10px;
+    min-width: 0;
     padding: 0;
 }
 
@@ -53,6 +62,7 @@ h1:focus {
     gap: 16px;
     justify-content: space-between;
     margin-bottom: 0;
+    min-width: 0;
     padding: 10px;
 }
 
@@ -80,6 +90,7 @@ h1:focus {
     display: grid;
     gap: 8px;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    min-width: 0;
     margin-bottom: 0;
 }
 
@@ -92,6 +103,7 @@ h1:focus {
     gap: 1px;
     grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
     margin-bottom: 0;
+    min-width: 0;
     padding: 1px;
 }
 
@@ -101,6 +113,7 @@ h1:focus {
     display: grid;
     gap: 2px;
     min-height: 58px;
+    min-width: 0;
     padding: 6px 8px;
 }
 
@@ -118,10 +131,119 @@ h1:focus {
 
 .operation-cell small {
     color: #333333;
+    overflow-wrap: anywhere;
 }
 
 .operation-cell.warning {
     background: #fff0d9;
+}
+
+.budget-panel {
+    align-items: center;
+    background: #eceef2;
+    border-color: #ffffff #777d86 #777d86 #ffffff;
+    border-style: solid;
+    border-width: 2px;
+    display: grid;
+    gap: 9px;
+    grid-template-columns: minmax(220px, 0.45fr) minmax(220px, 1fr) minmax(260px, 0.7fr);
+    padding: 9px;
+}
+
+.budget-panel span,
+.ai-dashboard-grid span {
+    color: #123f86;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.budget-panel strong,
+.ai-dashboard-grid strong {
+    display: block;
+    font-size: 20px;
+    line-height: 1.1;
+    margin: 2px 0;
+}
+
+.budget-panel small,
+.ai-dashboard-grid small {
+    color: #333333;
+}
+
+.budget-panel.warning,
+.ai-dashboard-panel.warning {
+    background: #fff0d9;
+}
+
+.budget-panel.danger,
+.ai-dashboard-panel.danger {
+    background: #fde8e8;
+}
+
+.budget-meter {
+    background: #ffffff;
+    border-color: #777d86 #ffffff #ffffff #777d86;
+    border-style: solid;
+    border-width: 2px;
+    height: 18px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.budget-meter span {
+    background: #1f7a45;
+    display: block;
+    height: 100%;
+    max-width: 100%;
+    min-width: 2px;
+}
+
+.warning .budget-meter span {
+    background: #a05a00;
+}
+
+.danger .budget-meter span {
+    background: #9b1c1c;
+}
+
+.budget-controls {
+    display: grid;
+    gap: 7px;
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
+}
+
+.budget-controls label {
+    color: var(--muted);
+    display: grid;
+    font-size: 12px;
+    font-weight: 700;
+    gap: 4px;
+}
+
+.budget-controls input {
+    background: #ffffff;
+    border-color: #777d86 #ffffff #ffffff #777d86;
+    border-style: solid;
+    border-width: 2px;
+    color: var(--text);
+    min-height: 28px;
+    padding: 4px 6px;
+}
+
+.ai-dashboard-panel {
+    background: #eceef2;
+}
+
+.ai-dashboard-grid {
+    align-items: center;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: minmax(210px, 1fr) minmax(180px, 0.8fr) minmax(180px, 0.8fr) auto;
+}
+
+.ai-dashboard-grid .budget-meter {
+    margin-top: 6px;
 }
 
 .stat-tile,
@@ -163,10 +285,27 @@ h1:focus {
     display: grid;
     gap: 10px;
     grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
 }
 
 .split-grid {
-    grid-template-columns: minmax(270px, 0.36fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 0.36fr) minmax(0, 1fr);
+}
+
+.ai-usage-grid {
+    grid-template-columns: minmax(0, 0.34fr) minmax(0, 1fr);
+}
+
+.ai-summary-grid {
+    grid-template-columns: repeat(3, minmax(240px, 1fr));
+}
+
+.po-detail-grid {
+    align-items: start;
+    display: grid;
+    gap: 10px;
+    grid-template-columns: minmax(0, 0.58fr) minmax(0, 1fr);
+    min-width: 0;
 }
 
 .movement-action-grid {
@@ -176,7 +315,14 @@ h1:focus {
 .panel,
 .admin-form,
 .toolbar-panel {
+    min-width: 0;
     padding: 9px;
+}
+
+.stacked-panels {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
 }
 
 .section-heading {
@@ -209,6 +355,10 @@ h1:focus {
     margin: 0;
 }
 
+.compact-heading {
+    margin: 0 0 7px;
+}
+
 .section-heading span {
     color: #333333;
 }
@@ -221,6 +371,7 @@ h1:focus {
 
 .admin-table {
     border-collapse: collapse;
+    min-width: 100%;
     width: 100%;
 }
 
@@ -230,6 +381,7 @@ h1:focus {
     padding: 7px 6px;
     text-align: left;
     vertical-align: top;
+    overflow-wrap: anywhere;
 }
 
 .admin-table th {
@@ -269,6 +421,38 @@ h1:focus {
     padding: 5px;
 }
 
+.po-line-table {
+    table-layout: fixed;
+}
+
+.po-line-table th:nth-child(1),
+.po-line-table td:nth-child(1) {
+    width: 29%;
+}
+
+.po-line-table th:nth-child(2),
+.po-line-table td:nth-child(2),
+.po-line-table th:nth-child(3),
+.po-line-table td:nth-child(3),
+.po-line-table th:nth-child(4),
+.po-line-table td:nth-child(4) {
+    width: 12%;
+}
+
+.po-line-table th:nth-child(5),
+.po-line-table td:nth-child(5) {
+    width: 17%;
+}
+
+.po-line-table th:nth-child(6),
+.po-line-table td:nth-child(6) {
+    width: 18%;
+}
+
+.table-action-cell {
+    white-space: nowrap;
+}
+
 .admin-form {
     display: grid;
     gap: 8px;
@@ -296,14 +480,21 @@ h1:focus {
 .admin-form textarea,
 .admin-form select,
 .toolbar-panel input,
-.toolbar-panel select {
+.toolbar-panel select,
+.table-input {
     background: #ffffff;
     border-color: #777d86 #ffffff #ffffff #777d86;
     border-style: solid;
     border-width: 2px;
     color: var(--text);
     min-height: 28px;
+    min-width: 0;
     padding: 4px 6px;
+    width: 100%;
+}
+
+.table-input {
+    max-width: 92px;
 }
 
 .admin-form textarea {
@@ -315,11 +506,60 @@ h1:focus {
     font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
 }
 
+.ai-usage-form textarea {
+    min-height: 4.25rem;
+}
+
+.advanced-toggle {
+    justify-self: start;
+}
+
+.advanced-panel {
+    background: #f3f5f8;
+    border: 1px solid #c4c8cf;
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+    padding: 8px;
+}
+
+.import-panel {
+    display: grid;
+    gap: 8px;
+}
+
+.import-panel label {
+    color: var(--muted);
+    display: grid;
+    font-size: 12px;
+    font-weight: 700;
+    gap: 4px;
+}
+
+.import-panel select,
+.import-panel textarea {
+    background: #ffffff;
+    border-color: #777d86 #ffffff #ffffff #777d86;
+    border-style: solid;
+    border-width: 2px;
+    color: var(--text);
+    min-height: 28px;
+    min-width: 0;
+    padding: 4px 6px;
+    width: 100%;
+}
+
+.import-panel textarea {
+    font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+    min-height: 180px;
+}
+
 .form-grid,
 .toolbar-panel {
     display: grid;
     gap: 7px;
-    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr));
+    min-width: 0;
 }
 
 .toolbar-panel {
@@ -331,6 +571,11 @@ h1:focus {
     align-items: center;
     display: flex;
     gap: 5px;
+}
+
+.po-actions {
+    margin-top: 8px;
+    flex-wrap: wrap;
 }
 
 .record-summary {
@@ -355,6 +600,35 @@ h1:focus {
 .compact-summary {
     margin-bottom: 0;
     padding: 6px;
+}
+
+.openrouter-fields,
+.price-mode-note {
+    background: #f3f5f8;
+    border: 1px solid #c4c8cf;
+    display: grid;
+    gap: 7px;
+    padding: 7px;
+}
+
+.price-mode-note {
+    grid-template-columns: minmax(130px, 0.4fr) minmax(0, 1fr);
+}
+
+.price-mode-note strong {
+    color: #123f86;
+}
+
+.price-mode-note span {
+    color: #333333;
+}
+
+.price-mode-note.custom {
+    background: #e2f3e9;
+}
+
+.price-mode-note.locked {
+    background: #e8edf7;
 }
 
 .setup-panel {
@@ -499,6 +773,15 @@ button:disabled,
     padding: 6px;
 }
 
+.import-errors {
+    display: grid;
+    gap: 3px;
+}
+
+.import-errors small {
+    color: #333333;
+}
+
 .valid.modified:not([type=checkbox]) {
     outline: 1px solid #26b050;
 }
@@ -525,7 +808,19 @@ button:disabled,
         flex-direction: column;
     }
 
-    .split-grid {
+    .split-grid,
+    .po-detail-grid,
+    .budget-panel,
+    .ai-dashboard-grid,
+    .ai-summary-grid {
         grid-template-columns: 1fr;
+    }
+
+    .app-sidebar,
+    .detail,
+    .panel,
+    .admin-form,
+    .toolbar-panel {
+        width: 100%;
     }
 }

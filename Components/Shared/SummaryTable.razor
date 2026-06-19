@@ -1,0 +1,62 @@
+<article class="panel">
+    <div class="section-heading">
+        <h2>@Title</h2>
+        <span>@Rows.Count rows</span>
+    </div>
+
+    <table class="admin-table compact">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Runs</th>
+                <th>Tokens</th>
+                <th>Cost</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (Rows.Count == 0)
+            {
+                <tr>
+                    <td colspan="4" class="empty-cell">@EmptyText</td>
+                </tr>
+            }
+            else
+            {
+                @foreach (var row in Rows)
+                {
+                    <tr>
+                        <td>
+                            <strong>@row.Key</strong>
+                            <small>@RowDetail(row)</small>
+                        </td>
+                        <td>@row.RequestCount.ToString("N0")</td>
+                        <td>@row.TotalTokens.ToString("N0")</td>
+                        <td>
+                            @row.EffectiveCostUsd.ToString("C6")
+                            <small>@row.EstimatedCostUsd.ToString("C6") estimated</small>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</article>
+
+@code {
+    [Parameter]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public IReadOnlyList<AiUsageGroupDto> Rows { get; set; } = [];
+
+    [Parameter]
+    public string EmptyText { get; set; } = "No rows.";
+
+    private static string RowDetail(AiUsageGroupDto row)
+    {
+        var provider = string.IsNullOrWhiteSpace(row.BillingProvider) ? row.Provider : row.BillingProvider;
+        var model = string.IsNullOrWhiteSpace(row.OpenRouterModelSlug) ? row.ModelName : row.OpenRouterModelSlug;
+        var route = string.IsNullOrWhiteSpace(row.RouteName) ? "Standard" : row.RouteName;
+        return $"{provider ?? "Provider"} / {model ?? "Model"} / {route}";
+    }
+}

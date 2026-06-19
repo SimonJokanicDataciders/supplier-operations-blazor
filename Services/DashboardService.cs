@@ -76,6 +76,7 @@ public class DashboardService(AppDbContext db)
 
         var suppliersWithLowStock = suppliers.Count(supplier =>
             supplier.Products.Any(product => product.CurrentStock <= product.ReorderLevel));
+        var aiUsage = await GetDashboardAiUsageAsync(cancellationToken);
 
         return new DashboardSummary(
             products.Count,
@@ -97,7 +98,82 @@ public class DashboardService(AppDbContext db)
             lowStockProducts,
             recentMovements,
             supplierRows,
-            supplierOverview);
+            supplierOverview,
+            aiUsage);
+    }
+
+    private async Task<AiUsageSummary> GetDashboardAiUsageAsync(CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+        var monthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var records = await db.AiTokenUsageRecords
+            .Where(record => record.CreatedAt >= monthStart)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+        var totalRequestCount = await db.AiTokenUsageRecords.CountAsync(cancellationToken);
+        var budget = await db.AiMonthlyBudgets
+            .AsNoTracking()
+            .FirstOrDefaultAsync(value => value.MonthStart == monthStart, cancellationToken)
+            ?? new AiMonthlyBudget
+            {
+                MonthStart = monthStart,
+                BudgetUsd = 25m,
+                WarningThresholdPercent = 80m,
+                CriticalThresholdPercent = 100m
+            };
+
+        var effectiveSpend = records.Sum(record => record.EffectiveCostUsd);
+        var budgetUsedPercent = budget.BudgetUsd == 0
+            ? 0
+            : Math.Round(effectiveSpend / budget.BudgetUsd * 100m, 2, MidpointRounding.AwayFromZero);
+        var featureRows = BuildAiUsageGroupRows(records, record => record.FeatureName);
+        var providerRows = BuildAiUsageGroupRows(records, record =>
+            string.IsNullOrWhiteSpace(record.BillingProvider) ? record.Provider : record.BillingProvider);
+        var modelRows = BuildAiUsageGroupRows(records, record =>
+            string.IsNullOrWhiteSpace(record.RouteName)
+                ? $"{record.Provider} / {record.ModelName}"
+                : $"{record.Provider} / {record.ModelName} / {record.RouteName}");
+
+        return new AiUsageSummary(
+            totalRequestCount,
+            records.Count,
+            records.Sum(record => record.TotalTokens),
+            records.Sum(record => record.EstimatedCostUsd),
+            effectiveSpend,
+            budget.BudgetUsd,
+            budget.WarningThresholdPercent,
+            budgetUsedPercent,
+            budget.BudgetUsd > 0 &&
+                effectiveSpend >= budget.BudgetUsd * budget.WarningThresholdPercent / 100m &&
+                effectiveSpend <= budget.BudgetUsd,
+            budget.BudgetUsd > 0 && effectiveSpend > budget.BudgetUsd,
+            modelRows.FirstOrDefault()?.Name,
+            featureRows.FirstOrDefault()?.Name,
+            records.Count == 0 ? null : records.Max(record => record.CreatedAt),
+            featureRows,
+            providerRows,
+            modelRows);
+    }
+
+    private static IReadOnlyList<AiUsageGroupSummary> BuildAiUsageGroupRows(
+        IReadOnlyList<AiTokenUsageRecord> records,
+        Func<AiTokenUsageRecord, string> keySelector)
+    {
+        return records
+            .GroupBy(record =>
+            {
+                var key = keySelector(record);
+                return string.IsNullOrWhiteSpace(key) ? "Unassigned" : key;
+            })
+            .Select(group => new AiUsageGroupSummary(
+                group.Key,
+                group.Count(),
+                group.Sum(record => record.TotalTokens),
+                group.Sum(record => record.EstimatedCostUsd),
+                group.Sum(record => record.EffectiveCostUsd)))
+            .OrderByDescending(row => row.ActualCostUsd)
+            .ThenBy(row => row.Name)
+            .ToList();
     }
 
     private static SupplierListItemDto ToSupplierListItemDto(Supplier supplier)

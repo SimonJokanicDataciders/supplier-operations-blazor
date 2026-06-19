@@ -1,0 +1,302 @@
+@page "/purchase-orders/{Id:int}"
+@rendermode InteractiveServer
+@using System.ComponentModel.DataAnnotations
+@inject InventoryService Inventory
+
+<PageTitle>Purchase Order</PageTitle>
+
+<header class="page-header">
+    <div>
+        <span>Operations</span>
+        <h1>@Title</h1>
+        <p>Manage supplier order lines and receive stock into inventory.</p>
+    </div>
+    <a class="button-link" href="purchase-orders">Back to orders</a>
+</header>
+
+@if (loading)
+{
+    <p><em>Loading purchase order...</em></p>
+}
+else if (order is null)
+{
+    <section class="panel">
+        <div class="section-heading">
+            <h2>Not found</h2>
+            <span>Missing record</span>
+        </div>
+        <p>The requested purchase order does not exist.</p>
+    </section>
+}
+else
+{
+    <section class="operations-strip">
+        <article class="operation-cell">
+            <span>Supplier</span>
+            <strong>@(order.Supplier?.Name ?? "-")</strong>
+            <small>@(order.Supplier?.CountryCode ?? "-")</small>
+        </article>
+        <article class="operation-cell">
+            <span>Status</span>
+            <strong>@order.Status</strong>
+            <small>PO-@order.Id.ToString("0000")</small>
+        </article>
+        <article class="operation-cell">
+            <span>Received</span>
+            <strong>@order.Lines.Sum(line => line.ReceivedQuantity) / @order.Lines.Sum(line => line.OrderedQuantity)</strong>
+            <small>units</small>
+        </article>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <p class="form-message">@message</p>
+    }
+
+    <section class="po-detail-grid">
+        <section class="panel">
+            <div class="section-heading">
+                <h2>Lines</h2>
+                <span>@order.Lines.Count products</span>
+            </div>
+            <table class="admin-table po-line-table">
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>Ordered</th>
+                        <th>Received</th>
+                        <th>Open</th>
+                        <th>Receive now</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (order.Lines.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="6" class="empty-cell">No lines on this draft yet.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var line in order.Lines.OrderBy(line => line.Product?.Name))
+                        {
+                            <tr>
+                                <td>
+                                    <strong>@(line.Product?.Name ?? "-")</strong>
+                                    <small>@(line.Product?.Sku ?? "-")</small>
+                                </td>
+                                <td>@line.OrderedQuantity</td>
+                                <td>@line.ReceivedQuantity</td>
+                                <td>@(line.OrderedQuantity - line.ReceivedQuantity)</td>
+                                <td>
+                                    @if (CanReceive)
+                                    {
+                                        <input class="table-input" type="number" min="0" max="@(line.OrderedQuantity - line.ReceivedQuantity)" @bind="receiveQuantities[line.Id]" />
+                                    }
+                                    else
+                                    {
+                                        <span class="muted">-</span>
+                                    }
+                                </td>
+                                <td class="table-action-cell">
+                                    @if (CanEditDraft)
+                                    {
+                                        <button type="button" @onclick="() => RemoveLineAsync(line.Id)">Remove</button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+
+            <div class="form-actions po-actions">
+                @if (CanEditDraft)
+                {
+                    <button class="btn btn-primary" type="button" disabled="@busy" @onclick="MarkOrderedAsync">Mark ordered</button>
+                }
+                @if (CanReceive)
+                {
+                    <button class="btn btn-primary" type="button" disabled="@busy" @onclick="ReceiveAsync">Receive quantities</button>
+                }
+                @if (CanCancel)
+                {
+                    <button type="button" disabled="@busy" @onclick="CancelAsync">Cancel order</button>
+                }
+            </div>
+        </section>
+
+        <EditForm Model="lineForm" OnValidSubmit="SaveLineAsync" FormName="purchase-order-line-form" class="admin-form">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+            <h2>@(ExistingLine is null ? "Add draft line" : "Update draft line")</h2>
+
+            <label>
+                Product
+                <InputSelect @bind-Value="lineForm.ProductId">
+                    <option value="0">Choose product</option>
+                    @foreach (var product in SupplierProducts)
+                    {
+                        <option value="@product.Id">@product.Name (@product.CurrentStock in stock)</option>
+                    }
+                </InputSelect>
+            </label>
+            <label>
+                Ordered quantity
+                <InputNumber @bind-Value="lineForm.OrderedQuantity" />
+            </label>
+
+            <button class="btn btn-primary" type="submit" disabled="@(!CanEditDraft || busy)">Save line</button>
+            @if (!CanEditDraft)
+            {
+                <p class="muted">Lines can only be edited while the purchase order is a draft.</p>
+            }
+        </EditForm>
+    </section>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private bool loading = true;
+    private bool busy;
+    private string? message;
+    private PurchaseOrder? order;
+    private List<Product> products = [];
+    private LineForm lineForm = new();
+    private Dictionary<int, int> receiveQuantities = [];
+
+    private string Title => order is null ? "Purchase order" : $"PO-{order.Id:0000}";
+
+    private bool CanEditDraft => order?.Status == PurchaseOrderStatus.Draft;
+
+    private bool CanReceive => order?.Status is PurchaseOrderStatus.Ordered or PurchaseOrderStatus.PartiallyReceived;
+
+    private bool CanCancel => order?.Status is PurchaseOrderStatus.Draft or PurchaseOrderStatus.Ordered or PurchaseOrderStatus.PartiallyReceived;
+
+    private IEnumerable<Product> SupplierProducts =>
+        products.Where(product => product.SupplierId == order?.SupplierId);
+
+    private PurchaseOrderLine? ExistingLine =>
+        order?.Lines.FirstOrDefault(line => line.ProductId == lineForm.ProductId);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        order = await Inventory.GetPurchaseOrderAsync(Id);
+        products = await Inventory.GetProductsAsync();
+        SyncForms();
+        loading = false;
+    }
+
+    private void SyncForms()
+    {
+        receiveQuantities = order?.Lines.ToDictionary(line => line.Id, _ => 0) ?? [];
+
+        if (order is null)
+        {
+            return;
+        }
+
+        if (!SupplierProducts.Any(product => product.Id == lineForm.ProductId))
+        {
+            lineForm.ProductId = SupplierProducts.FirstOrDefault()?.Id ?? 0;
+        }
+
+        lineForm.OrderedQuantity = ExistingLine?.OrderedQuantity ?? 1;
+    }
+
+    private async Task SaveLineAsync()
+    {
+        if (order is null)
+        {
+            return;
+        }
+
+        busy = true;
+        var result = await Inventory.AddOrUpdatePurchaseOrderLineAsync(
+            order.Id,
+            lineForm.ProductId,
+            lineForm.OrderedQuantity);
+        message = result.Message;
+        await LoadAsync();
+        busy = false;
+    }
+
+    private async Task RemoveLineAsync(int lineId)
+    {
+        if (order is null)
+        {
+            return;
+        }
+
+        busy = true;
+        var result = await Inventory.RemovePurchaseOrderLineAsync(order.Id, lineId);
+        message = result.Message;
+        await LoadAsync();
+        busy = false;
+    }
+
+    private async Task MarkOrderedAsync()
+    {
+        if (order is null)
+        {
+            return;
+        }
+
+        busy = true;
+        var result = await Inventory.MarkPurchaseOrderOrderedAsync(order.Id);
+        message = result.Message;
+        await LoadAsync();
+        busy = false;
+    }
+
+    private async Task ReceiveAsync()
+    {
+        if (order is null)
+        {
+            return;
+        }
+
+        busy = true;
+        var lines = receiveQuantities
+            .Where(pair => pair.Value > 0)
+            .Select(pair => new PurchaseOrderReceiveLineInput(pair.Key, pair.Value))
+            .ToList();
+
+        var result = await Inventory.ReceivePurchaseOrderAsync(order.Id, lines);
+        message = result.Message;
+        await LoadAsync();
+        busy = false;
+    }
+
+    private async Task CancelAsync()
+    {
+        if (order is null)
+        {
+            return;
+        }
+
+        busy = true;
+        var result = await Inventory.CancelPurchaseOrderAsync(order.Id);
+        message = result.Message;
+        await LoadAsync();
+        busy = false;
+    }
+
+    private sealed class LineForm
+    {
+        [Range(1, int.MaxValue, ErrorMessage = "Choose a product.")]
+        public int ProductId { get; set; }
+
+        [Range(1, int.MaxValue, ErrorMessage = "Ordered quantity must be greater than zero.")]
+        public int OrderedQuantity { get; set; } = 1;
+    }
+}
