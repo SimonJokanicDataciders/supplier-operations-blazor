@@ -298,6 +298,11 @@ public class InventoryService(AppDbContext db)
             StockOutQuantityLast30Days = movements
                 .Where(movement => movement.CreatedAt >= since && movement.MovementType == StockMovementType.StockOut)
                 .Sum(movement => movement.Quantity),
+            AdjustmentCountLast30Days = movements
+                .Count(movement => movement.CreatedAt >= since && movement.MovementType == StockMovementType.StockAdjustment),
+            AdjustmentQuantityLast30Days = movements
+                .Where(movement => movement.CreatedAt >= since && movement.MovementType == StockMovementType.StockAdjustment)
+                .Sum(movement => movement.Quantity),
             LatestMovementAt = movements.Count == 0 ? null : movements.Max(movement => movement.CreatedAt)
         };
     }
@@ -564,6 +569,82 @@ public class InventoryService(AppDbContext db)
             cancellationToken);
     }
 
+    public async Task<(bool Succeeded, string Message)> AdjustStockAsync(
+        int productId,
+        int countedStock,
+        string? reason,
+        CancellationToken cancellationToken = default)
+    {
+        var product = await db.Products.FirstOrDefaultAsync(
+            item => item.Id == productId,
+            cancellationToken);
+
+        if (product is null)
+        {
+            return (false, "Choose a valid product.");
+        }
+
+        if (countedStock < 0)
+        {
+            return (false, "Counted stock cannot be negative.");
+        }
+
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            return (false, "Reason is required.");
+        }
+
+        var difference = countedStock - product.CurrentStock;
+        if (difference == 0)
+        {
+            return (true, "No adjustment needed. Counted stock already matches current stock.");
+        }
+
+        var now = DateTime.UtcNow;
+
+        product.CurrentStock = countedStock;
+        product.UpdatedAt = now;
+
+        db.StockMovements.Add(new StockMovement
+        {
+            ProductId = product.Id,
+            MovementType = StockMovementType.StockAdjustment,
+            Quantity = Math.Abs(difference),
+            Reason = reason.Trim(),
+            CreatedAt = now
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+        return (true, "Stock adjustment saved.");
+    }
+
+    public async Task<StockMovementSummary> GetStockMovementSummaryAsync(CancellationToken cancellationToken = default)
+    {
+        var since = DateTime.UtcNow.AddDays(-30);
+        var movements = await db.StockMovements
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        var lowStockProductCount = await db.Products
+            .AsNoTracking()
+            .CountAsync(product => product.CurrentStock <= product.ReorderLevel, cancellationToken);
+
+        return new StockMovementSummary(
+            movements
+                .Where(movement => movement.CreatedAt >= since && movement.MovementType == StockMovementType.StockIn)
+                .Sum(movement => movement.Quantity),
+            movements
+                .Where(movement => movement.CreatedAt >= since && movement.MovementType == StockMovementType.StockOut)
+                .Sum(movement => movement.Quantity),
+            movements
+                .Count(movement => movement.CreatedAt >= since && movement.MovementType == StockMovementType.StockAdjustment),
+            movements
+                .Where(movement => movement.CreatedAt >= since && movement.MovementType == StockMovementType.StockAdjustment)
+                .Sum(movement => movement.Quantity),
+            lowStockProductCount,
+            movements.Count == 0 ? null : movements.Max(movement => movement.CreatedAt));
+    }
+
     public async Task<(bool Succeeded, string Message)> AddStockMovementAsync(
         StockMovement movement,
         CancellationToken cancellationToken = default)
@@ -591,6 +672,7 @@ public class InventoryService(AppDbContext db)
         {
             StockMovementType.StockIn => movement.Quantity,
             StockMovementType.StockOut => -movement.Quantity,
+            StockMovementType.StockAdjustment => throw new InvalidOperationException("Use AdjustStockAsync for stock adjustments."),
             _ => throw new InvalidOperationException("Unknown stock movement type.")
         };
 

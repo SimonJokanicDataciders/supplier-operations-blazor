@@ -35,6 +35,7 @@ It connects to the Supplier Intelligence app through a manual JSON bridge: resea
 - Preselect suppliers when creating products from supplier pages.
 - Record quick stock-in movements from supplier detail pages.
 - Record quick stock-out movements with negative stock prevention.
+- Record stock adjustment batches from final counted quantities.
 - Expose flat JSON API endpoints for dashboard, products, suppliers, imports, and operation summaries.
 
 ## Product Flow
@@ -111,6 +112,8 @@ The bridge is manual by design. It keeps this learning project simple and avoids
 | `GET /api/suppliers/{id}` | Supplier detail |
 | `POST /api/suppliers/import/preview` | Preview supplier import |
 | `POST /api/suppliers/import` | Import or update suppliers |
+| `GET /api/stock-movements/summary` | Stock movement totals and adjustment summary |
+| `POST /api/stock-movements/adjust` | Adjust product stock to a final counted quantity |
 | `GET /api/suppliers/{id}/operations-summary` | Supplier operation summary |
 
 ## Current Features
@@ -127,6 +130,8 @@ The bridge is manual by design. It keeps this learning project simple and avoids
 | Imported supplier onboarding | Working |
 | Quick stock-in from supplier detail | Working |
 | Quick stock-out from supplier detail | Working |
+| Stock adjustment batch | Working |
+| Stock movement summary API | Working |
 | Minimal API endpoints | Working |
 | SQLite schema initialization | Working |
 

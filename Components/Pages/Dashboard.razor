@@ -26,6 +26,29 @@ else
         <StatTile Label="Inventory value" Value="@summary.InventoryValue.ToString("C")" Detail="stock x unit price" />
     </section>
 
+    <section class="operations-strip">
+        <article class="operation-cell">
+            <span>Stock in / 30d</span>
+            <strong>@summary.StockInQuantityLast30Days</strong>
+            <small>received units</small>
+        </article>
+        <article class="operation-cell">
+            <span>Stock out / 30d</span>
+            <strong>@summary.StockOutQuantityLast30Days</strong>
+            <small>issued units</small>
+        </article>
+        <article class="operation-cell">
+            <span>Adjustments / 30d</span>
+            <strong>@summary.AdjustmentCountLast30Days</strong>
+            <small>@summary.AdjustmentQuantityLast30Days units reconciled</small>
+        </article>
+        <article class="operation-cell warning">
+            <span>Low-stock suppliers</span>
+            <strong>@summary.SuppliersWithLowStock</strong>
+            <small>supplier accounts</small>
+        </article>
+    </section>
+
     <section class="panel-grid">
         <article class="panel">
             <div class="section-heading">

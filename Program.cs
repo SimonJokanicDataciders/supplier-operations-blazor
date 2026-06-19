@@ -53,7 +53,12 @@ app.MapGet("/api/dashboard", async (DashboardService dashboard) =>
         summary.ProductCount,
         summary.SupplierCount,
         summary.LowStockCount,
+        summary.SuppliersWithLowStock,
         summary.InventoryValue,
+        summary.StockInQuantityLast30Days,
+        summary.StockOutQuantityLast30Days,
+        summary.AdjustmentCountLast30Days,
+        summary.AdjustmentQuantityLast30Days,
         summary.SupplierOverview,
         LowStockProducts = summary.LowStockProducts.Select(ToProductResponse),
         RecentMovements = summary.RecentMovements.Select(ToMovementResponse)
@@ -109,6 +114,26 @@ app.MapGet("/api/suppliers/{id:int}/operations-summary", async (int id, Inventor
     return summary is null ? Results.NotFound() : Results.Ok(summary);
 })
 .WithName("GetSupplierOperationsSummary");
+
+app.MapGet("/api/stock-movements/summary", async (InventoryService inventory) =>
+{
+    var summary = await inventory.GetStockMovementSummaryAsync();
+    return Results.Ok(summary);
+})
+.WithName("GetStockMovementSummary");
+
+app.MapPost("/api/stock-movements/adjust", async (StockAdjustmentRequest request, InventoryService inventory) =>
+{
+    var result = await inventory.AdjustStockAsync(
+        request.ProductId,
+        request.CountedStock,
+        request.Reason);
+
+    return result.Succeeded
+        ? Results.Ok(new { result.Message })
+        : Results.BadRequest(new { result.Message });
+})
+.WithName("AdjustStockToCount");
 
 app.Run();
 

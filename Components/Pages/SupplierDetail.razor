@@ -129,6 +129,41 @@ else
                     </label>
                     <button class="btn btn-primary" type="submit" disabled="@savingStockOut">Save stock out</button>
                 </EditForm>
+
+                <EditForm Model="stockAdjustmentForm" OnValidSubmit="SaveStockAdjustmentAsync" FormName="supplier-stock-adjustment-form" class="admin-form">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary />
+                    <h2>Quick stock adjustment</h2>
+
+                    @if (!string.IsNullOrWhiteSpace(stockAdjustmentMessage))
+                    {
+                        <p class="form-message">@stockAdjustmentMessage</p>
+                    }
+
+                    <label>
+                        Product
+                        <InputSelect @bind-Value="stockAdjustmentForm.ProductId" @bind-Value:after="SyncAdjustmentCountedStock">
+                            @foreach (var product in supplier.Products.OrderBy(product => product.Name))
+                            {
+                                <option value="@product.Id">@product.Name (@product.CurrentStock in stock)</option>
+                            }
+                        </InputSelect>
+                    </label>
+                    <div class="record-summary compact-summary">
+                        <span>Current system stock</span>
+                        <strong>@SelectedAdjustmentProductStockText</strong>
+                        <small>Enter the final counted stock after the physical count.</small>
+                    </div>
+                    <label>
+                        Final counted stock
+                        <InputNumber @bind-Value="stockAdjustmentForm.CountedStock" />
+                    </label>
+                    <label>
+                        Reason
+                        <InputTextArea @bind-Value="stockAdjustmentForm.Reason" />
+                    </label>
+                    <button class="btn btn-primary" type="submit" disabled="@savingStockAdjustment">Save adjustment</button>
+                </EditForm>
             </section>
         }
 
@@ -185,16 +220,23 @@ else
     private List<StockMovement> movements = [];
     private QuickStockForm stockInForm = new();
     private QuickStockForm stockOutForm = new();
+    private QuickStockAdjustmentForm stockAdjustmentForm = new();
     private string? stockInMessage;
     private string? stockOutMessage;
+    private string? stockAdjustmentMessage;
     private bool savingStockIn;
     private bool savingStockOut;
+    private bool savingStockAdjustment;
+
+    private string SelectedAdjustmentProductStockText =>
+        supplier?.Products.FirstOrDefault(product => product.Id == stockAdjustmentForm.ProductId)?.CurrentStock.ToString() ?? "-";
 
     protected override async Task OnParametersSetAsync()
     {
         loading = true;
         stockInMessage = null;
         stockOutMessage = null;
+        stockAdjustmentMessage = null;
         await LoadSupplierAsync();
         loading = false;
     }
@@ -212,6 +254,7 @@ else
             movements = await Inventory.GetRecentMovementsForSupplierAsync(Id);
             EnsureStockProductSelection(stockInForm);
             EnsureStockProductSelection(stockOutForm);
+            EnsureAdjustmentProductSelection(stockAdjustmentForm);
         }
         else
         {
@@ -220,6 +263,7 @@ else
             movements = [];
             stockInForm = new();
             stockOutForm = new();
+            stockAdjustmentForm = new();
         }
     }
 
@@ -269,6 +313,30 @@ else
         savingStockOut = false;
     }
 
+    private async Task SaveStockAdjustmentAsync()
+    {
+        savingStockAdjustment = true;
+        var result = await Inventory.AdjustStockAsync(
+            stockAdjustmentForm.ProductId,
+            stockAdjustmentForm.CountedStock,
+            stockAdjustmentForm.Reason);
+
+        stockAdjustmentMessage = result.Message;
+
+        if (result.Succeeded)
+        {
+            var selectedProductId = stockAdjustmentForm.ProductId;
+            stockAdjustmentForm = new QuickStockAdjustmentForm
+            {
+                ProductId = selectedProductId
+            };
+            await LoadSupplierAsync();
+            SyncAdjustmentCountedStock();
+        }
+
+        savingStockAdjustment = false;
+    }
+
     private void EnsureStockProductSelection(QuickStockForm form)
     {
         if (supplier is null || supplier.Products.Count == 0)
@@ -282,6 +350,32 @@ else
                 .OrderBy(product => product.Name)
                 .First()
                 .Id;
+        }
+    }
+
+    private void EnsureAdjustmentProductSelection(QuickStockAdjustmentForm form)
+    {
+        if (supplier is null || supplier.Products.Count == 0)
+        {
+            return;
+        }
+
+        if (!supplier.Products.Any(product => product.Id == form.ProductId))
+        {
+            form.ProductId = supplier.Products
+                .OrderBy(product => product.Name)
+                .First()
+                .Id;
+            SyncAdjustmentCountedStock();
+        }
+    }
+
+    private void SyncAdjustmentCountedStock()
+    {
+        var selectedProduct = supplier?.Products.FirstOrDefault(product => product.Id == stockAdjustmentForm.ProductId);
+        if (selectedProduct is not null)
+        {
+            stockAdjustmentForm.CountedStock = selectedProduct.CurrentStock;
         }
     }
 
@@ -303,6 +397,19 @@ else
 
         [Range(1, int.MaxValue, ErrorMessage = "Quantity must be greater than zero.")]
         public int Quantity { get; set; } = 1;
+
+        [Required]
+        [StringLength(500)]
+        public string Reason { get; set; } = string.Empty;
+    }
+
+    private sealed class QuickStockAdjustmentForm
+    {
+        [Range(1, int.MaxValue, ErrorMessage = "Choose a product.")]
+        public int ProductId { get; set; }
+
+        [Range(0, int.MaxValue, ErrorMessage = "Final counted stock cannot be negative.")]
+        public int CountedStock { get; set; }
 
         [Required]
         [StringLength(500)]

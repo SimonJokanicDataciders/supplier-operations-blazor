@@ -18,5 +18,9 @@ public class SupplierOperationSummary
 
     public int StockOutQuantityLast30Days { get; set; }
 
+    public int AdjustmentCountLast30Days { get; set; }
+
+    public int AdjustmentQuantityLast30Days { get; set; }
+
     public DateTime? LatestMovementAt { get; set; }
 }

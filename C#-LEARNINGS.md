@@ -35,7 +35,7 @@ What this teaches:
 
 ## Blazor Forms
 
-Blazor forms handle product creation, supplier creation, supplier import, stock in, and stock out.
+Blazor forms handle product creation, supplier creation, supplier import, stock in, stock out, and stock adjustment.
 
 What this teaches:
 
@@ -43,6 +43,7 @@ What this teaches:
 - validate user input with data annotations
 - handle submit events in C#
 - show feedback after an operation succeeds or fails
+- accept a final counted quantity and let C# calculate the movement delta
 
 ## Query Parameters
 
@@ -73,3 +74,25 @@ What this teaches:
 - keep database logic out of Razor pages
 - reuse logic between UI screens and API endpoints
 - enforce business rules in one place, like preventing negative stock
+- reuse the same stock movement rules for quick actions, adjustment batches, and APIs
+
+## Calculated State Changes
+
+Stock adjustment is based on the final count, not on the user manually choosing `+` or `-`.
+
+What this teaches:
+
+- compare current stock with the counted quantity
+- calculate the difference before saving a movement
+- reject invalid counts before changing inventory
+- keep the saved movement as the audit trail for the state change
+
+## API Aggregation
+
+Dashboard and stock movement summary APIs turn many rows into compact totals for the UI.
+
+What this teaches:
+
+- group stock movement data by type or purpose
+- return summary DTOs instead of raw movement rows
+- keep aggregation logic reusable between dashboard screens and API endpoints

@@ -2,6 +2,9 @@
     <StatTile Label="Products" Value="@Summary.ProductCount.ToString()" Detail="supplied products" />
     <StatTile Label="Low stock" Value="@Summary.LowStockCount.ToString()" Detail="needs attention" />
     <StatTile Label="Stock value" Value="@Summary.InventoryValue.ToString("C")" Detail="current stock value" />
+    <StatTile Label="Stock in" Value="@Summary.StockInQuantityLast30Days.ToString()" Detail="last 30 days" />
+    <StatTile Label="Stock out" Value="@Summary.StockOutQuantityLast30Days.ToString()" Detail="last 30 days" />
+    <StatTile Label="Adjustments" Value="@Summary.AdjustmentCountLast30Days.ToString()" Detail="@AdjustmentDetail" />
     <StatTile Label="Latest movement" Value="@LatestMovementText" Detail="supplier activity" />
 </section>
 
@@ -12,4 +15,6 @@
     private string LatestMovementText => Summary.LatestMovementAt is null
         ? "-"
         : Summary.LatestMovementAt.Value.ToLocalTime().ToString("g");
+
+    private string AdjustmentDetail => $"{Summary.AdjustmentQuantityLast30Days} units corrected";
 }

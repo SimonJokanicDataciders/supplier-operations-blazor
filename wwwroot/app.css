@@ -83,6 +83,47 @@ h1:focus {
     margin-bottom: 0;
 }
 
+.operations-strip {
+    background: #d6d9df;
+    border-color: #ffffff #777d86 #777d86 #ffffff;
+    border-style: solid;
+    border-width: 2px;
+    display: grid;
+    gap: 1px;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    margin-bottom: 0;
+    padding: 1px;
+}
+
+.operation-cell {
+    background: #eceef2;
+    border: 1px solid #b3bac4;
+    display: grid;
+    gap: 2px;
+    min-height: 58px;
+    padding: 6px 8px;
+}
+
+.operation-cell span {
+    color: #123f86;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.operation-cell strong {
+    font-size: 20px;
+    line-height: 1;
+}
+
+.operation-cell small {
+    color: #333333;
+}
+
+.operation-cell.warning {
+    background: #fff0d9;
+}
+
 .stat-tile,
 .panel,
 .admin-form,
@@ -311,6 +352,11 @@ h1:focus {
     color: #333333;
 }
 
+.compact-summary {
+    margin-bottom: 0;
+    padding: 6px;
+}
+
 .setup-panel {
     background: #f3f5f8;
 }
@@ -406,6 +452,12 @@ button:hover,
 .button-link:hover {
     background: #fff2cc;
     color: #111111;
+}
+
+button:disabled,
+.btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
 }
 
 .badge {

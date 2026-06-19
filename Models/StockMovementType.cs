@@ -3,5 +3,6 @@ namespace inventory_admin.Models;
 public enum StockMovementType
 {
     StockIn = 1,
-    StockOut = 2
+    StockOut = 2,
+    StockAdjustment = 3
 }

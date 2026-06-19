@@ -1,5 +1,6 @@
 @page "/stock-movements"
 @rendermode InteractiveServer
+@using System.ComponentModel.DataAnnotations
 @inject InventoryService Inventory
 
 <PageTitle>Stock Movements</PageTitle>
@@ -8,7 +9,7 @@
     <div>
         <span>Inventory</span>
         <h1>Stock movements</h1>
-        <p>Record stock in and stock out while protecting inventory from invalid negative stock.</p>
+        <p>Record stock in, stock out, and counted-stock adjustments while protecting inventory from invalid negative stock.</p>
     </div>
 </header>
 
@@ -25,7 +26,7 @@
 
         <label>
             Product
-            <InputSelect @bind-Value="movementForm.ProductId">
+            <InputSelect @bind-Value="movementForm.ProductId" @bind-Value:after="SyncCountedStockForSelection">
                 <option value="0">Choose product</option>
                 @foreach (var product in products)
                 {
@@ -35,20 +36,36 @@
         </label>
         <label>
             Movement type
-            <InputSelect @bind-Value="movementForm.MovementType">
+            <InputSelect @bind-Value="movementForm.MovementType" @bind-Value:after="SyncCountedStockForSelection">
                 <option value="@StockMovementType.StockIn">Stock in</option>
                 <option value="@StockMovementType.StockOut">Stock out</option>
+                <option value="@StockMovementType.StockAdjustment">Stock adjustment</option>
             </InputSelect>
         </label>
-        <label>
-            Quantity
-            <InputNumber @bind-Value="movementForm.Quantity" />
-        </label>
+        @if (movementForm.MovementType == StockMovementType.StockAdjustment)
+        {
+            <div class="record-summary compact-summary">
+                <span>Current system stock</span>
+                <strong>@SelectedProductStockText</strong>
+                <small>Adjustment stores the final counted stock, not a plus/minus movement.</small>
+            </div>
+            <label>
+                Final counted stock
+                <InputNumber @bind-Value="movementForm.CountedStock" />
+            </label>
+        }
+        else
+        {
+            <label>
+                Quantity
+                <InputNumber @bind-Value="movementForm.Quantity" />
+            </label>
+        }
         <label>
             Reason
             <InputTextArea @bind-Value="movementForm.Reason" />
         </label>
-        <button class="btn btn-primary" type="submit">Save movement</button>
+        <button class="btn btn-primary" type="submit" disabled="@saving">Save movement</button>
     </EditForm>
 
     <section class="panel">
@@ -83,14 +100,19 @@
 </section>
 
 @code {
-    private StockMovement movementForm = new();
+    private StockMovementForm movementForm = new();
     private List<Product> products = [];
     private List<StockMovement> movements = [];
     private string? message;
+    private bool saving;
+
+    private string SelectedProductStockText =>
+        products.FirstOrDefault(product => product.Id == movementForm.ProductId)?.CurrentStock.ToString() ?? "-";
 
     protected override async Task OnInitializedAsync()
     {
         await LoadAsync();
+        EnsureProductSelection();
     }
 
     private async Task LoadAsync()
@@ -101,13 +123,96 @@
 
     private async Task SaveMovementAsync()
     {
-        var result = await Inventory.AddStockMovementAsync(movementForm);
+        saving = true;
+        var result = movementForm.MovementType switch
+        {
+            StockMovementType.StockIn => await Inventory.StockInAsync(
+                movementForm.ProductId,
+                movementForm.Quantity,
+                movementForm.Reason),
+            StockMovementType.StockOut => await Inventory.StockOutAsync(
+                movementForm.ProductId,
+                movementForm.Quantity,
+                movementForm.Reason),
+            StockMovementType.StockAdjustment => await Inventory.AdjustStockAsync(
+                movementForm.ProductId,
+                movementForm.CountedStock,
+                movementForm.Reason),
+            _ => (Succeeded: false, Message: "Choose a valid movement type.")
+        };
+
         message = result.Message;
 
         if (result.Succeeded)
         {
-            movementForm = new StockMovement();
+            movementForm = new StockMovementForm();
             await LoadAsync();
+            EnsureProductSelection();
+        }
+
+        saving = false;
+    }
+
+    private void EnsureProductSelection()
+    {
+        if (products.Count == 0)
+        {
+            return;
+        }
+
+        if (!products.Any(product => product.Id == movementForm.ProductId))
+        {
+            movementForm.ProductId = products.First().Id;
+        }
+
+        SyncCountedStockForSelection();
+    }
+
+    private void SyncCountedStockForSelection()
+    {
+        if (movementForm.MovementType != StockMovementType.StockAdjustment)
+        {
+            return;
+        }
+
+        var selectedProduct = products.FirstOrDefault(product => product.Id == movementForm.ProductId);
+        if (selectedProduct is not null)
+        {
+            movementForm.CountedStock = selectedProduct.CurrentStock;
+        }
+    }
+
+    private sealed class StockMovementForm : IValidatableObject
+    {
+        [Range(1, int.MaxValue, ErrorMessage = "Choose a product.")]
+        public int ProductId { get; set; }
+
+        public StockMovementType MovementType { get; set; } = StockMovementType.StockIn;
+
+        [Range(1, int.MaxValue, ErrorMessage = "Quantity must be greater than zero.")]
+        public int Quantity { get; set; } = 1;
+
+        [Range(0, int.MaxValue, ErrorMessage = "Final counted stock cannot be negative.")]
+        public int CountedStock { get; set; }
+
+        [Required]
+        [StringLength(500)]
+        public string Reason { get; set; } = string.Empty;
+
+        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+        {
+            if (MovementType == StockMovementType.StockAdjustment && CountedStock < 0)
+            {
+                yield return new ValidationResult(
+                    "Final counted stock cannot be negative.",
+                    [nameof(CountedStock)]);
+            }
+            else if (MovementType != StockMovementType.StockAdjustment && Quantity <= 0)
+            {
+                yield return new ValidationResult(
+                    "Quantity must be greater than zero.",
+                    [nameof(Quantity)]);
+            }
         }
     }
 }

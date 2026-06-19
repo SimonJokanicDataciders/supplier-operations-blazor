@@ -23,6 +23,12 @@ public class DashboardService(AppDbContext db)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
+        var since = DateTime.UtcNow.AddDays(-30);
+        var movementsLast30Days = await db.StockMovements
+            .Where(movement => movement.CreatedAt >= since)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
         var lowStockProducts = products
             .Where(product => product.CurrentStock <= product.ReorderLevel)
             .OrderBy(product => product.CurrentStock)
@@ -68,11 +74,26 @@ public class DashboardService(AppDbContext db)
             .ThenBy(row => row.SupplierName)
             .ToList();
 
+        var suppliersWithLowStock = suppliers.Count(supplier =>
+            supplier.Products.Any(product => product.CurrentStock <= product.ReorderLevel));
+
         return new DashboardSummary(
             products.Count,
             suppliers.Count,
             lowStockProducts.Count,
+            suppliersWithLowStock,
             products.Sum(product => product.CurrentStock * product.UnitPrice),
+            movementsLast30Days
+                .Where(movement => movement.MovementType == StockMovementType.StockIn)
+                .Sum(movement => movement.Quantity),
+            movementsLast30Days
+                .Where(movement => movement.MovementType == StockMovementType.StockOut)
+                .Sum(movement => movement.Quantity),
+            movementsLast30Days
+                .Count(movement => movement.MovementType == StockMovementType.StockAdjustment),
+            movementsLast30Days
+                .Where(movement => movement.MovementType == StockMovementType.StockAdjustment)
+                .Sum(movement => movement.Quantity),
             lowStockProducts,
             recentMovements,
             supplierRows,
