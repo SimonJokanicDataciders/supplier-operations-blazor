@@ -1592,10 +1592,10 @@ public class InventoryService(AppDbContext db)
 
         record = new AiTokenUsageRecord
         {
-            FeatureName = ReadString(row.Values, "featurename", "feature", "source", "app", "endpoint") ?? string.Empty,
+            FeatureName = ReadString(row.Values, "featurename", "feature", "source", "app", "endpoint") ?? "Imported usage",
             Provider = provider,
             BillingProvider = billingProvider,
-            UpstreamProvider = ReadString(row.Values, "upstreamprovider", "upstream"),
+            UpstreamProvider = ReadString(row.Values, "upstreamprovider", "upstream", "providername"),
             ModelName = ReadString(row.Values, "modelname", "model", "modelslug", "openroutermodelslug") ?? string.Empty,
             OpenRouterModelSlug = ReadString(row.Values, "openroutermodelslug", "modelpermaslug", "modelslug"),
             RouteName = ReadString(row.Values, "routename", "route", "router", "servicetier"),
