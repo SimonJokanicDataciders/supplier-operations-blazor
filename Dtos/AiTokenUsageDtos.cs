@@ -25,7 +25,8 @@ public sealed record AiTokenUsageCreateRequest(
 
 public sealed record AiTokenUsageImportRequest(
     string Content,
-    string? Format);
+    string? Format,
+    IReadOnlyList<int>? SelectedRowNumbers = null);
 
 public sealed record AiTokenUsageImportResult(
     int ImportedCount,
@@ -34,6 +35,39 @@ public sealed record AiTokenUsageImportResult(
 public sealed record AiTokenUsageImportError(
     int RowNumber,
     string Message);
+
+public sealed record AiTokenUsageImportPreviewResult(
+    IReadOnlyList<AiTokenUsageImportPreviewRow> Rows,
+    IReadOnlyList<AiTokenUsageImportError> Errors);
+
+public sealed record AiTokenUsageImportPreviewRow(
+    int RowNumber,
+    bool IsValid,
+    bool IsDuplicate,
+    bool IsSelected,
+    string FeatureName,
+    string Provider,
+    string BillingProvider,
+    string? UpstreamProvider,
+    string ModelName,
+    string? OpenRouterModelSlug,
+    string? RouteName,
+    int PromptTokens,
+    int CachedInputTokens,
+    int CompletionTokens,
+    int ReasoningTokens,
+    int ToolCallCount,
+    int SearchCallCount,
+    decimal PromptCostPerMillionTokens,
+    decimal CachedInputCostPerMillionTokens,
+    decimal CompletionCostPerMillionTokens,
+    decimal SearchCostPerThousandCalls,
+    decimal EstimatedCostUsd,
+    decimal? ActualCostUsd,
+    decimal EffectiveCostUsd,
+    DateTime CreatedAt,
+    string? Notes,
+    IReadOnlyList<string> Errors);
 
 public sealed record AiBudgetSettingsRequest(
     decimal MonthlyBudgetUsd,

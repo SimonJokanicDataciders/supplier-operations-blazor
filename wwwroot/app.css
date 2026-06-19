@@ -554,6 +554,43 @@ h1:focus {
     min-height: 180px;
 }
 
+.import-preview {
+    border-color: #ffffff #868c95 #868c95 #ffffff;
+    border-style: solid;
+    border-width: 2px;
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+    overflow-x: auto;
+    padding: 6px;
+}
+
+.import-preview .section-heading {
+    margin-bottom: 0;
+}
+
+.import-preview .admin-table {
+    min-width: 780px;
+}
+
+.import-preview td {
+    vertical-align: top;
+}
+
+.import-preview small {
+    color: var(--muted);
+    display: block;
+    line-height: 1.25;
+}
+
+.import-row-duplicate {
+    background: #fff6d9;
+}
+
+.import-row-invalid {
+    background: #ffe8e4;
+}
+
 .form-grid,
 .toolbar-panel {
     display: grid;
