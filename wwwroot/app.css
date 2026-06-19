@@ -116,7 +116,8 @@ h1:focus {
 }
 
 .panel-grid,
-.split-grid {
+.split-grid,
+.movement-action-grid {
     align-items: start;
     display: grid;
     gap: 10px;
@@ -125,6 +126,10 @@ h1:focus {
 
 .split-grid {
     grid-template-columns: minmax(270px, 0.36fr) minmax(0, 1fr);
+}
+
+.movement-action-grid {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
 .panel,

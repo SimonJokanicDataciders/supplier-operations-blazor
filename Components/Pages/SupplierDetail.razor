@@ -69,35 +69,67 @@ else
 
         @if (hasProducts)
         {
-            <EditForm Model="stockInForm" OnValidSubmit="SaveStockInAsync" FormName="supplier-stock-in-form" class="admin-form">
-                <DataAnnotationsValidator />
-                <ValidationSummary />
-                <h2>Quick stock in</h2>
+            <section class="movement-action-grid">
+                <EditForm Model="stockInForm" OnValidSubmit="SaveStockInAsync" FormName="supplier-stock-in-form" class="admin-form">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary />
+                    <h2>Quick stock in</h2>
 
-                @if (!string.IsNullOrWhiteSpace(stockInMessage))
-                {
-                    <p class="form-message">@stockInMessage</p>
-                }
+                    @if (!string.IsNullOrWhiteSpace(stockInMessage))
+                    {
+                        <p class="form-message">@stockInMessage</p>
+                    }
 
-                <label>
-                    Product
-                    <InputSelect @bind-Value="stockInForm.ProductId">
-                        @foreach (var product in supplier.Products.OrderBy(product => product.Name))
-                        {
-                            <option value="@product.Id">@product.Name (@product.CurrentStock in stock)</option>
-                        }
-                    </InputSelect>
-                </label>
-                <label>
-                    Quantity
-                    <InputNumber @bind-Value="stockInForm.Quantity" />
-                </label>
-                <label>
-                    Reason
-                    <InputTextArea @bind-Value="stockInForm.Reason" />
-                </label>
-                <button class="btn btn-primary" type="submit" disabled="@savingStockIn">Save stock in</button>
-            </EditForm>
+                    <label>
+                        Product
+                        <InputSelect @bind-Value="stockInForm.ProductId">
+                            @foreach (var product in supplier.Products.OrderBy(product => product.Name))
+                            {
+                                <option value="@product.Id">@product.Name (@product.CurrentStock in stock)</option>
+                            }
+                        </InputSelect>
+                    </label>
+                    <label>
+                        Quantity
+                        <InputNumber @bind-Value="stockInForm.Quantity" />
+                    </label>
+                    <label>
+                        Reason
+                        <InputTextArea @bind-Value="stockInForm.Reason" />
+                    </label>
+                    <button class="btn btn-primary" type="submit" disabled="@savingStockIn">Save stock in</button>
+                </EditForm>
+
+                <EditForm Model="stockOutForm" OnValidSubmit="SaveStockOutAsync" FormName="supplier-stock-out-form" class="admin-form">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary />
+                    <h2>Quick stock out</h2>
+
+                    @if (!string.IsNullOrWhiteSpace(stockOutMessage))
+                    {
+                        <p class="form-message">@stockOutMessage</p>
+                    }
+
+                    <label>
+                        Product
+                        <InputSelect @bind-Value="stockOutForm.ProductId">
+                            @foreach (var product in supplier.Products.OrderBy(product => product.Name))
+                            {
+                                <option value="@product.Id">@product.Name (@product.CurrentStock in stock)</option>
+                            }
+                        </InputSelect>
+                    </label>
+                    <label>
+                        Quantity
+                        <InputNumber @bind-Value="stockOutForm.Quantity" />
+                    </label>
+                    <label>
+                        Reason
+                        <InputTextArea @bind-Value="stockOutForm.Reason" />
+                    </label>
+                    <button class="btn btn-primary" type="submit" disabled="@savingStockOut">Save stock out</button>
+                </EditForm>
+            </section>
         }
 
         <article class="panel">
@@ -151,14 +183,18 @@ else
     private SupplierOperationSummary? summary;
     private List<Product> lowStockProducts = [];
     private List<StockMovement> movements = [];
-    private QuickStockInForm stockInForm = new();
+    private QuickStockForm stockInForm = new();
+    private QuickStockForm stockOutForm = new();
     private string? stockInMessage;
+    private string? stockOutMessage;
     private bool savingStockIn;
+    private bool savingStockOut;
 
     protected override async Task OnParametersSetAsync()
     {
         loading = true;
         stockInMessage = null;
+        stockOutMessage = null;
         await LoadSupplierAsync();
         loading = false;
     }
@@ -174,7 +210,8 @@ else
                 .OrderBy(product => product.CurrentStock)
                 .ToList();
             movements = await Inventory.GetRecentMovementsForSupplierAsync(Id);
-            EnsureStockInProductSelection();
+            EnsureStockProductSelection(stockInForm);
+            EnsureStockProductSelection(stockOutForm);
         }
         else
         {
@@ -182,6 +219,7 @@ else
             lowStockProducts = [];
             movements = [];
             stockInForm = new();
+            stockOutForm = new();
         }
     }
 
@@ -198,7 +236,7 @@ else
         if (result.Succeeded)
         {
             var selectedProductId = stockInForm.ProductId;
-            stockInForm = new QuickStockInForm
+            stockInForm = new QuickStockForm
             {
                 ProductId = selectedProductId
             };
@@ -208,17 +246,39 @@ else
         savingStockIn = false;
     }
 
-    private void EnsureStockInProductSelection()
+    private async Task SaveStockOutAsync()
+    {
+        savingStockOut = true;
+        var result = await Inventory.StockOutAsync(
+            stockOutForm.ProductId,
+            stockOutForm.Quantity,
+            stockOutForm.Reason);
+
+        stockOutMessage = result.Message;
+
+        if (result.Succeeded)
+        {
+            var selectedProductId = stockOutForm.ProductId;
+            stockOutForm = new QuickStockForm
+            {
+                ProductId = selectedProductId
+            };
+            await LoadSupplierAsync();
+        }
+
+        savingStockOut = false;
+    }
+
+    private void EnsureStockProductSelection(QuickStockForm form)
     {
         if (supplier is null || supplier.Products.Count == 0)
         {
-            stockInForm = new();
             return;
         }
 
-        if (!supplier.Products.Any(product => product.Id == stockInForm.ProductId))
+        if (!supplier.Products.Any(product => product.Id == form.ProductId))
         {
-            stockInForm.ProductId = supplier.Products
+            form.ProductId = supplier.Products
                 .OrderBy(product => product.Name)
                 .First()
                 .Id;
@@ -236,7 +296,7 @@ else
         return new MarkupString($"<a href=\"{encoded}\" target=\"_blank\" rel=\"noreferrer\">{encoded}</a>");
     }
 
-    private sealed class QuickStockInForm
+    private sealed class QuickStockForm
     {
         [Range(1, int.MaxValue, ErrorMessage = "Choose a product.")]
         public int ProductId { get; set; }

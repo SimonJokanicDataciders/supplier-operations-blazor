@@ -34,6 +34,7 @@ It connects to the Supplier Intelligence app through a manual JSON bridge: resea
 - Add the first product directly from a supplier detail page.
 - Preselect suppliers when creating products from supplier pages.
 - Record quick stock-in movements from supplier detail pages.
+- Record quick stock-out movements with negative stock prevention.
 - Expose flat JSON API endpoints for dashboard, products, suppliers, imports, and operation summaries.
 
 ## Product Flow
@@ -125,6 +126,7 @@ The bridge is manual by design. It keeps this learning project simple and avoids
 | Supplier detail pages | Working |
 | Imported supplier onboarding | Working |
 | Quick stock-in from supplier detail | Working |
+| Quick stock-out from supplier detail | Working |
 | Minimal API endpoints | Working |
 | SQLite schema initialization | Working |
 
