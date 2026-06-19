@@ -202,9 +202,69 @@ else
                     <textarea class="payload-input" @bind="importForm.Content"></textarea>
                 </label>
                 <div class="form-actions">
-                    <button class="btn btn-secondary" type="button" disabled="@saving" @onclick="ImportUsageAsync">Import usage</button>
+                    <button class="btn btn-secondary" type="button" disabled="@saving" @onclick="PreviewImportAsync">Preview import</button>
+                    <button class="btn btn-primary" type="button" disabled="@(!CanImportSelected)" @onclick="ImportUsageAsync">Import selected</button>
                     <button class="btn" type="button" disabled="@saving" @onclick="ClearImport">Clear</button>
                 </div>
+                @if (importPreviewRows.Count > 0)
+                {
+                    <div class="import-preview">
+                        <div class="section-heading">
+                            <h2>Import preview</h2>
+                            <span>@SelectedImportCount selected / @importPreviewRows.Count rows</span>
+                        </div>
+                        <table class="admin-table compact">
+                            <thead>
+                                <tr>
+                                    <th>Use</th>
+                                    <th>Status</th>
+                                    <th>Feature</th>
+                                    <th>Provider / model</th>
+                                    <th>Tokens</th>
+                                    <th>Cost</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var row in importPreviewRows)
+                                {
+                                    <tr class="@ImportRowClass(row)">
+                                        <td>
+                                            <InputCheckbox @bind-Value="row.IsSelected" disabled="@(!row.Row.IsValid || row.Row.IsDuplicate)" />
+                                        </td>
+                                        <td>
+                                            @if (row.Row.IsDuplicate)
+                                            {
+                                                <span class="badge badge-warn">Duplicate</span>
+                                            }
+                                            else if (!row.Row.IsValid)
+                                            {
+                                                <span class="badge badge-danger">Invalid</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge badge-ok">Ready</span>
+                                            }
+                                            @foreach (var error in row.Row.Errors.Take(2))
+                                            {
+                                                <small>@error</small>
+                                            }
+                                        </td>
+                                        <td>@row.Row.FeatureName</td>
+                                        <td>
+                                            <strong>@row.Row.Provider</strong>
+                                            <small>@row.Row.ModelName</small>
+                                        </td>
+                                        <td>
+                                            @row.Row.PromptTokens.ToString("N0") in / @row.Row.CompletionTokens.ToString("N0") out
+                                            <small>@row.Row.CreatedAt.ToLocalTime().ToString("g")</small>
+                                        </td>
+                                        <td>@row.Row.EffectiveCostUsd.ToString("C6")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
                 @if (importErrors.Count > 0)
                 {
                     <div class="form-message import-errors">
@@ -339,6 +399,12 @@ else
     private bool saving;
     private bool showAdvancedUsage;
     private List<AiTokenUsageImportError> importErrors = [];
+    private List<AiImportPreviewRowVm> importPreviewRows = [];
+
+    private int SelectedImportCount =>
+        importPreviewRows.Count(row => row.IsSelected && row.Row.IsValid && !row.Row.IsDuplicate);
+
+    private bool CanImportSelected => !saving && SelectedImportCount > 0;
 
     private string BudgetDetail =>
         summary?.Budget is null
@@ -436,6 +502,33 @@ else
         showAdvancedUsage = !showAdvancedUsage;
     }
 
+    private async Task PreviewImportAsync()
+    {
+        saving = true;
+        message = null;
+        importErrors = [];
+        importPreviewRows = [];
+
+        try
+        {
+            var result = await Inventory.PreviewAiTokenUsageImportAsync(new AiTokenUsageImportRequest(
+                importForm.Content,
+                importForm.Format == "auto" ? null : importForm.Format));
+
+            importErrors = result.Errors.ToList();
+            importPreviewRows = result.Rows
+                .Select(row => new AiImportPreviewRowVm(row))
+                .ToList();
+            message = importPreviewRows.Count == 0
+                ? "No usage rows were detected."
+                : $"Previewed {importPreviewRows.Count} rows; {SelectedImportCount} ready to import.";
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
     private async Task ImportUsageAsync()
     {
         saving = true;
@@ -446,7 +539,11 @@ else
         {
             var result = await Inventory.ImportAiTokenUsageAsync(new AiTokenUsageImportRequest(
                 importForm.Content,
-                importForm.Format == "auto" ? null : importForm.Format));
+                importForm.Format == "auto" ? null : importForm.Format,
+                importPreviewRows
+                    .Where(row => row.IsSelected && row.Row.IsValid && !row.Row.IsDuplicate)
+                    .Select(row => row.Row.RowNumber)
+                    .ToList()));
 
             importErrors = result.Errors.ToList();
             message = result.Errors.Count == 0
@@ -456,6 +553,7 @@ else
             if (result.ImportedCount > 0)
             {
                 importForm = new AiUsageImportForm();
+                importPreviewRows = [];
                 await LoadAsync();
             }
         }
@@ -470,7 +568,13 @@ else
         importForm = new AiUsageImportForm();
         message = null;
         importErrors = [];
+        importPreviewRows = [];
     }
+
+    private static string ImportRowClass(AiImportPreviewRowVm row) =>
+        row.Row.IsDuplicate ? "import-row-duplicate" :
+        !row.Row.IsValid ? "import-row-invalid" :
+        string.Empty;
 
     private async Task SaveBudgetAsync()
     {
@@ -543,6 +647,13 @@ else
     {
         public string Format { get; set; } = "auto";
         public string Content { get; set; } = string.Empty;
+    }
+
+    private sealed class AiImportPreviewRowVm(AiTokenUsageImportPreviewRow row)
+    {
+        public AiTokenUsageImportPreviewRow Row { get; } = row;
+
+        public bool IsSelected { get; set; } = row.IsSelected;
     }
 
     private sealed class AiBudgetForm

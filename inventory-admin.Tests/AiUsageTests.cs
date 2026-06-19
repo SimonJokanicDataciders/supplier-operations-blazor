@@ -1,298 +1,11 @@
-using inventory_admin.Data;
 using inventory_admin.Dtos;
 using inventory_admin.Models;
-using inventory_admin.Services;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace inventory_admin.Tests;
 
-public sealed class InventoryServiceTests
+public sealed class AiUsageTests
 {
-    [Fact]
-    public async Task StockOutAsync_DoesNotAllowNegativeStock()
-    {
-        await using var fixture = await InventoryServiceFixture.CreateAsync();
-        var product = await fixture.CreateProductAsync(currentStock: 3);
-
-        var result = await fixture.Service.StockOutAsync(
-            product.Id,
-            quantity: 5,
-            reason: "Too much usage");
-
-        var savedProduct = await fixture.Db.Products.SingleAsync(item => item.Id == product.Id);
-
-        Assert.False(result.Succeeded);
-        Assert.Equal("Stock out cannot make current stock negative.", result.Message);
-        Assert.Equal(3, savedProduct.CurrentStock);
-        Assert.Empty(await fixture.Db.StockMovements.ToListAsync());
-    }
-
-    [Fact]
-    public async Task AdjustStockAsync_SetsFinalStockAndRecordsDifference()
-    {
-        await using var fixture = await InventoryServiceFixture.CreateAsync();
-        var product = await fixture.CreateProductAsync(currentStock: 12);
-
-        var result = await fixture.Service.AdjustStockAsync(
-            product.Id,
-            countedStock: 9,
-            reason: "Cycle count");
-
-        var savedProduct = await fixture.Db.Products.SingleAsync(item => item.Id == product.Id);
-        var movement = await fixture.Db.StockMovements.SingleAsync();
-
-        Assert.True(result.Succeeded);
-        Assert.Equal(9, savedProduct.CurrentStock);
-        Assert.Equal(StockMovementType.StockAdjustment, movement.MovementType);
-        Assert.Equal(3, movement.Quantity);
-        Assert.Equal("Cycle count", movement.Reason);
-    }
-
-    [Fact]
-    public async Task AdjustStockAsync_SameCountCreatesNoMovement()
-    {
-        await using var fixture = await InventoryServiceFixture.CreateAsync();
-        var product = await fixture.CreateProductAsync(currentStock: 12);
-
-        var result = await fixture.Service.AdjustStockAsync(
-            product.Id,
-            countedStock: 12,
-            reason: "Cycle count");
-
-        var savedProduct = await fixture.Db.Products.SingleAsync(item => item.Id == product.Id);
-
-        Assert.True(result.Succeeded);
-        Assert.Equal("No adjustment needed. Counted stock already matches current stock.", result.Message);
-        Assert.Equal(12, savedProduct.CurrentStock);
-        Assert.Empty(await fixture.Db.StockMovements.ToListAsync());
-    }
-
-    [Fact]
-    public async Task ImportSuppliersAsync_UpdatesExistingSupplierByExternalKey()
-    {
-        await using var fixture = await InventoryServiceFixture.CreateAsync();
-        fixture.Db.Suppliers.Add(new Supplier
-        {
-            Name = "Old Supplier Name",
-            CountryCode = "AT",
-            SourceSystem = "SupplierIntelligence",
-            ExternalSupplierKey = "supplier-123",
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        });
-        await fixture.Db.SaveChangesAsync();
-
-        var result = await fixture.Service.ImportSuppliersAsync(new SupplierImportRequest(
-            [
-                new SupplierImportItemDto(
-                    "Updated Supplier",
-                    "DE",
-                    "ops@example.com",
-                    "https://supplier.example",
-                    "Bearings",
-                    "Imported from research",
-                    "SupplierIntelligence",
-                    "supplier-123",
-                    "https://research.example")
-            ]));
-
-        var suppliers = await fixture.Db.Suppliers.ToListAsync();
-        var supplier = Assert.Single(suppliers);
-
-        Assert.Equal(0, result.CreatedCount);
-        Assert.Equal(1, result.UpdatedCount);
-        Assert.Equal("Updated Supplier", supplier.Name);
-        Assert.Equal("DE", supplier.CountryCode);
-        Assert.Equal("ops@example.com", supplier.ContactEmail);
-    }
-
-    [Fact]
-    public async Task CreatePurchaseOrderAsync_StoresSupplierAndLines()
-    {
-        await using var fixture = await InventoryServiceFixture.CreateAsync();
-        var product = await fixture.CreateProductAsync(currentStock: 2);
-
-        var result = await fixture.Service.CreatePurchaseOrderAsync(
-            product.SupplierId,
-            [new PurchaseOrderLineInput(product.Id, 8)]);
-
-        var order = await fixture.Db.PurchaseOrders
-            .Include(value => value.Lines)
-            .SingleAsync();
-
-        Assert.True(result.Succeeded);
-        Assert.Equal(product.SupplierId, order.SupplierId);
-        Assert.Equal(PurchaseOrderStatus.Draft, order.Status);
-        var line = Assert.Single(order.Lines);
-        Assert.Equal(product.Id, line.ProductId);
-        Assert.Equal(8, line.OrderedQuantity);
-        Assert.Equal(0, line.ReceivedQuantity);
-    }
-
-    [Fact]
-    public async Task CreatePurchaseOrderAsync_RejectsZeroQuantity()
-    {
-        await using var fixture = await InventoryServiceFixture.CreateAsync();
-        var product = await fixture.CreateProductAsync(currentStock: 2);
-
-        var result = await fixture.Service.CreatePurchaseOrderAsync(
-            product.SupplierId,
-            [new PurchaseOrderLineInput(product.Id, 0)]);
-
-        Assert.False(result.Succeeded);
-        Assert.Equal("Ordered quantity must be greater than zero.", result.Message);
-        Assert.Empty(await fixture.Db.PurchaseOrders.ToListAsync());
-    }
-
-    [Fact]
-    public async Task MarkPurchaseOrderOrderedAsync_MovesDraftToOrdered()
-    {
-        await using var fixture = await InventoryServiceFixture.CreateAsync();
-        var product = await fixture.CreateProductAsync(currentStock: 2);
-        var create = await fixture.Service.CreatePurchaseOrderAsync(
-            product.SupplierId,
-            [new PurchaseOrderLineInput(product.Id, 8)]);
-
-        var result = await fixture.Service.MarkPurchaseOrderOrderedAsync(create.Order!.Id);
-
-        var order = await fixture.Db.PurchaseOrders.SingleAsync();
-        Assert.True(result.Succeeded);
-        Assert.Equal(PurchaseOrderStatus.Ordered, order.Status);
-        Assert.NotNull(order.OrderedAt);
-    }
-
-    [Fact]
-    public async Task ReceivePurchaseOrderAsync_DoesNotAllowMoreThanOpenQuantity()
-    {
-        await using var fixture = await InventoryServiceFixture.CreateAsync();
-        var product = await fixture.CreateProductAsync(currentStock: 2);
-        var create = await fixture.Service.CreatePurchaseOrderAsync(
-            product.SupplierId,
-            [new PurchaseOrderLineInput(product.Id, 8)]);
-        await fixture.Service.MarkPurchaseOrderOrderedAsync(create.Order!.Id);
-        var line = await fixture.Db.PurchaseOrderLines.SingleAsync();
-
-        var result = await fixture.Service.ReceivePurchaseOrderAsync(
-            create.Order.Id,
-            [new PurchaseOrderReceiveLineInput(line.Id, 9)]);
-
-        var savedProduct = await fixture.Db.Products.SingleAsync(value => value.Id == product.Id);
-        Assert.False(result.Succeeded);
-        Assert.Equal("Received quantity cannot be greater than the open ordered quantity.", result.Message);
-        Assert.Equal(2, savedProduct.CurrentStock);
-        Assert.Empty(await fixture.Db.StockMovements.ToListAsync());
-    }
-
-    [Fact]
-    public async Task ReceivePurchaseOrderAsync_PartialReceiveUpdatesStatus()
-    {
-        await using var fixture = await InventoryServiceFixture.CreateAsync();
-        var product = await fixture.CreateProductAsync(currentStock: 2);
-        var create = await fixture.Service.CreatePurchaseOrderAsync(
-            product.SupplierId,
-            [new PurchaseOrderLineInput(product.Id, 8)]);
-        await fixture.Service.MarkPurchaseOrderOrderedAsync(create.Order!.Id);
-        var line = await fixture.Db.PurchaseOrderLines.SingleAsync();
-
-        var result = await fixture.Service.ReceivePurchaseOrderAsync(
-            create.Order.Id,
-            [new PurchaseOrderReceiveLineInput(line.Id, 3)]);
-
-        var order = await fixture.Db.PurchaseOrders.SingleAsync();
-        var savedLine = await fixture.Db.PurchaseOrderLines.SingleAsync();
-        Assert.True(result.Succeeded);
-        Assert.Equal(PurchaseOrderStatus.PartiallyReceived, order.Status);
-        Assert.Equal(3, savedLine.ReceivedQuantity);
-    }
-
-    [Fact]
-    public async Task ReceivePurchaseOrderAsync_FullReceiveUpdatesStatus()
-    {
-        await using var fixture = await InventoryServiceFixture.CreateAsync();
-        var product = await fixture.CreateProductAsync(currentStock: 2);
-        var create = await fixture.Service.CreatePurchaseOrderAsync(
-            product.SupplierId,
-            [new PurchaseOrderLineInput(product.Id, 8)]);
-        await fixture.Service.MarkPurchaseOrderOrderedAsync(create.Order!.Id);
-        var line = await fixture.Db.PurchaseOrderLines.SingleAsync();
-
-        var result = await fixture.Service.ReceivePurchaseOrderAsync(
-            create.Order.Id,
-            [new PurchaseOrderReceiveLineInput(line.Id, 8)]);
-
-        var order = await fixture.Db.PurchaseOrders.SingleAsync();
-        Assert.True(result.Succeeded);
-        Assert.Equal(PurchaseOrderStatus.Received, order.Status);
-        Assert.NotNull(order.ReceivedAt);
-    }
-
-    [Fact]
-    public async Task ReceivePurchaseOrderAsync_CreatesStockInMovementAndIncreasesStock()
-    {
-        await using var fixture = await InventoryServiceFixture.CreateAsync();
-        var product = await fixture.CreateProductAsync(currentStock: 2);
-        var create = await fixture.Service.CreatePurchaseOrderAsync(
-            product.SupplierId,
-            [new PurchaseOrderLineInput(product.Id, 8)]);
-        await fixture.Service.MarkPurchaseOrderOrderedAsync(create.Order!.Id);
-        var line = await fixture.Db.PurchaseOrderLines.SingleAsync();
-
-        var result = await fixture.Service.ReceivePurchaseOrderAsync(
-            create.Order.Id,
-            [new PurchaseOrderReceiveLineInput(line.Id, 5)]);
-
-        var savedProduct = await fixture.Db.Products.SingleAsync(value => value.Id == product.Id);
-        var movement = await fixture.Db.StockMovements.SingleAsync();
-        Assert.True(result.Succeeded);
-        Assert.Equal(7, savedProduct.CurrentStock);
-        Assert.Equal(StockMovementType.StockIn, movement.MovementType);
-        Assert.Equal(5, movement.Quantity);
-        Assert.Equal($"Purchase order #{create.Order.Id} received", movement.Reason);
-    }
-
-    [Fact]
-    public async Task CancelledPurchaseOrder_CannotBeReceived()
-    {
-        await using var fixture = await InventoryServiceFixture.CreateAsync();
-        var product = await fixture.CreateProductAsync(currentStock: 2);
-        var create = await fixture.Service.CreatePurchaseOrderAsync(
-            product.SupplierId,
-            [new PurchaseOrderLineInput(product.Id, 8)]);
-        await fixture.Service.MarkPurchaseOrderOrderedAsync(create.Order!.Id);
-        await fixture.Service.CancelPurchaseOrderAsync(create.Order.Id);
-        var line = await fixture.Db.PurchaseOrderLines.SingleAsync();
-
-        var result = await fixture.Service.ReceivePurchaseOrderAsync(
-            create.Order.Id,
-            [new PurchaseOrderReceiveLineInput(line.Id, 1)]);
-
-        Assert.False(result.Succeeded);
-        Assert.Equal("Cancelled or fully received purchase orders cannot receive stock.", result.Message);
-    }
-
-    [Fact]
-    public async Task LowStockPurchaseOrderCreateFlow_StoresSelectedSupplierAndProduct()
-    {
-        await using var fixture = await InventoryServiceFixture.CreateAsync();
-        var product = await fixture.CreateProductAsync(currentStock: 1, reorderLevel: 6);
-        var suggestedQuantity = Math.Max(product.ReorderLevel - product.CurrentStock, 1);
-
-        var result = await fixture.Service.CreatePurchaseOrderAsync(
-            product.SupplierId,
-            [new PurchaseOrderLineInput(product.Id, suggestedQuantity)]);
-
-        var order = await fixture.Db.PurchaseOrders
-            .Include(value => value.Lines)
-            .SingleAsync();
-        var line = Assert.Single(order.Lines);
-
-        Assert.True(result.Succeeded);
-        Assert.Equal(product.SupplierId, order.SupplierId);
-        Assert.Equal(product.Id, line.ProductId);
-        Assert.Equal(5, line.OrderedQuantity);
-    }
-
     [Fact]
     public async Task SaveAiTokenUsageRecordAsync_CalculatesEstimatedCost()
     {
@@ -623,69 +336,52 @@ public sealed class InventoryServiceTests
         Assert.Equal(0.015m, record.ActualCostUsd);
     }
 
-    private sealed class InventoryServiceFixture : IAsyncDisposable
+    [Fact]
+    public async Task PreviewAiTokenUsageImportAsync_MarksLikelyDuplicatesAsUnselected()
     {
-        private readonly SqliteConnection connection;
-
-        private InventoryServiceFixture(SqliteConnection connection, AppDbContext db)
+        await using var fixture = await InventoryServiceFixture.CreateAsync();
+        await fixture.Service.SaveAiTokenUsageRecordAsync(new AiTokenUsageRecord
         {
-            this.connection = connection;
-            Db = db;
-            Service = new InventoryService(db);
-        }
+            FeatureName = "Existing run",
+            Provider = "OpenAI",
+            BillingProvider = "OpenAI",
+            ModelName = "gpt-test",
+            PromptTokens = 100,
+            CompletionTokens = 50,
+            ActualCostUsd = 0.01m,
+            CreatedAt = new DateTime(2026, 6, 4, 10, 0, 0, DateTimeKind.Utc)
+        });
 
-        public AppDbContext Db { get; }
+        const string csv = """
+            feature,provider,model,input_tokens,output_tokens,actual_cost_usd,created_at
+            Imported run,OpenAI,gpt-test,100,50,0.01,2026-06-04T10:00:00Z
+            """;
 
-        public InventoryService Service { get; }
+        var preview = await fixture.Service.PreviewAiTokenUsageImportAsync(new AiTokenUsageImportRequest(csv, "csv"));
+        var row = Assert.Single(preview.Rows);
 
-        public static async Task<InventoryServiceFixture> CreateAsync()
-        {
-            var connection = new SqliteConnection("Data Source=:memory:");
-            await connection.OpenAsync();
+        Assert.True(row.IsValid);
+        Assert.True(row.IsDuplicate);
+        Assert.False(row.IsSelected);
+    }
 
-            var options = new DbContextOptionsBuilder<AppDbContext>()
-                .UseSqlite(connection)
-                .Options;
+    [Fact]
+    public async Task ImportAiTokenUsageAsync_ImportsOnlySelectedPreviewRows()
+    {
+        await using var fixture = await InventoryServiceFixture.CreateAsync();
+        const string csv = """
+            feature,provider,model,input_tokens,output_tokens,actual_cost_usd,created_at
+            First run,OpenAI,gpt-test,100,50,0.01,2026-06-05T10:00:00Z
+            Second run,OpenRouter,anthropic/claude-test,200,75,0.03,2026-06-05T11:00:00Z
+            """;
 
-            var db = new AppDbContext(options);
-            await db.Database.EnsureCreatedAsync();
-            await db.EnsureAdditiveSchemaAsync();
+        var result = await fixture.Service.ImportAiTokenUsageAsync(new AiTokenUsageImportRequest(csv, "csv", [3]));
+        var record = await fixture.Db.AiTokenUsageRecords.SingleAsync();
 
-            return new InventoryServiceFixture(connection, db);
-        }
-
-        public async Task<Product> CreateProductAsync(int currentStock, int reorderLevel = 2)
-        {
-            var category = new Category
-            {
-                Name = "Hardware"
-            };
-            var supplier = new Supplier
-            {
-                Name = "Test Supplier",
-                CountryCode = "AT"
-            };
-            var product = new Product
-            {
-                Name = "Test Product",
-                Sku = Guid.NewGuid().ToString("N")[..12],
-                Category = category,
-                Supplier = supplier,
-                CurrentStock = currentStock,
-                ReorderLevel = reorderLevel,
-                UnitPrice = 10
-            };
-
-            Db.Products.Add(product);
-            await Db.SaveChangesAsync();
-
-            return product;
-        }
-
-        public async ValueTask DisposeAsync()
-        {
-            await Db.DisposeAsync();
-            await connection.DisposeAsync();
-        }
+        Assert.Equal(1, result.ImportedCount);
+        Assert.Empty(result.Errors);
+        Assert.Equal("Second run", record.FeatureName);
+        Assert.Equal("OpenRouter", record.Provider);
+        Assert.Equal("anthropic/claude-test", record.ModelName);
     }
 }

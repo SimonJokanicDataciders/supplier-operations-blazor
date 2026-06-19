@@ -287,6 +287,13 @@ app.MapPost("/api/ai-usage/import", async (AiTokenUsageImportRequest request, In
 })
 .WithName("ImportAiUsage");
 
+app.MapPost("/api/ai-usage/import/preview", async (AiTokenUsageImportRequest request, InventoryService inventory) =>
+{
+    var result = await inventory.PreviewAiTokenUsageImportAsync(request);
+    return Results.Ok(result);
+})
+.WithName("PreviewAiUsageImport");
+
 app.Run();
 
 static object ToProductResponse(inventory_admin.Models.Product product)
